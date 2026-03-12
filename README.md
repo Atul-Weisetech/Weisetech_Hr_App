@@ -1,5 +1,29 @@
 This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
 
+# API Flow (how data works)
+
+This app uses a single API surface `hr/src/api/hrApi.js`.
+
+- When `USE_MOCK_API = true` in `hr/src/api/apiConfig.js`, the app uses an **in-memory mock API** (`mockApi.js`). This lets you develop UI without a backend.
+- When `USE_MOCK_API = false`, the same calls are made using **axios** to `API_BASE_URL` (example: `http://localhost:3000`).
+
+## How screens get data
+
+All screens read and update data through the `AppStoreContext` (`hr/src/state/AppStore.js`):
+
+- On app start, `AppStoreProvider` calls `refreshAll()`
+  - It loads `payrolls`, `leaveRequests`, `wfhRequests`, `warnings` using `hrApi.*`
+  - It stores them in React state
+- Screens subscribe using `useContext(AppStoreContext)`
+  - Example: `ManageLeaveRequestScreen` renders `leaveRequests`
+  - When you tap Approve/Reject it calls `updateLeaveStatus()` which calls the API and then updates state
+
+## Adding a new API endpoint
+
+1. Add a function in `hr/src/api/hrApi.js` (and in `mockApi.js` if you want mock mode).
+2. Call it from `AppStore.js` (preferred) so the rest of the app stays “dumb UI”.
+3. Use the store function in screens.
+
 # Getting Started
 
 > **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
