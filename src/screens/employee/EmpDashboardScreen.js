@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { AuthContext } from '../../state/AuthContext';
 import { AppStoreContext } from '../../state/AppStore';
@@ -39,7 +40,15 @@ export default function EmpDashboardScreen() {
           <Text style={styles.userName}>{user.name} 👋</Text>
           <Text style={styles.empId}>{user.id}</Text>
         </View>
-        <TouchableOpacity style={styles.logoutBtn} onPress={signOut}>
+        <TouchableOpacity
+          style={styles.logoutBtn}
+          onPress={() =>
+            Alert.alert('Logout', 'Are you sure you want to logout?', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Logout', style: 'destructive', onPress: signOut },
+            ])
+          }
+        >
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
       </View>
@@ -68,7 +77,7 @@ export default function EmpDashboardScreen() {
           <Text style={styles.statNumber}>{pendingLeaves}</Text>
           <Text style={styles.statLabel}>Leaves{'\n'}Pending</Text>
         </View>
-        <View style={[styles.statCard, { borderLeftColor: '#2563eb' }]}>
+        <View style={[styles.statCard, { borderLeftColor: '#e11d48' }]}>
           <Text style={styles.statNumber}>{myWfh.length}</Text>
           <Text style={styles.statLabel}>WFH{'\n'}Requests</Text>
         </View>
@@ -116,7 +125,7 @@ export default function EmpDashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f0f4ff' },
+  root: { flex: 1, backgroundColor: '#f3f4f6' },
   content: { padding: 20, paddingBottom: 32 },
 
   header: {
@@ -137,19 +146,19 @@ const styles = StyleSheet.create({
   logoutText: { color: '#dc2626', fontWeight: '700', fontSize: 13 },
 
   salaryCard: {
-    backgroundColor: '#2563eb',
+    backgroundColor: '#e11d48',
     borderRadius: 22,
     padding: 24,
     marginBottom: 26,
-    shadowColor: '#2563eb',
+    shadowColor: '#e11d48',
     shadowOpacity: 0.35,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 5 },
     elevation: 8,
   },
-  salaryLabel:  { fontSize: 13, color: '#bfdbfe', fontWeight: '600', marginBottom: 8 },
+  salaryLabel:  { fontSize: 13, color: '#fecdd3', fontWeight: '600', marginBottom: 8 },
   salaryAmount: { fontSize: 38, fontWeight: '900', color: '#ffffff' },
-  salaryMonth:  { fontSize: 13, color: '#93c5fd', marginTop: 5 },
+  salaryMonth:  { fontSize: 13, color: '#fda4af', marginTop: 5 },
 
   sectionTitle: {
     fontSize: 16,

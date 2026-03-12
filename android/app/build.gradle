@@ -2,6 +2,15 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
+// Fix for Windows MAX_PATH (260 char) limitation.
+// The project lives deep inside OneDrive which causes CMake object-file
+// paths to exceed 250 characters and the build to fail.
+// Redirecting buildDir to a short root-level path keeps every derived
+// path (including .cxx/Debug/…) well within the Windows limit.
+if (System.getProperty("os.name").toLowerCase().contains("windows")) {
+    buildDir = "C:/b/hr"
+}
+
 /**
  * This is the configuration block to customize your React Native Android app.
  * By default you don't need to apply any configuration, just uncomment the lines you need.

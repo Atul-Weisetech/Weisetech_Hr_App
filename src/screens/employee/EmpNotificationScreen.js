@@ -11,7 +11,7 @@ const TYPE_ICONS = {
 };
 
 const TYPE_COLORS = {
-  leave:   '#eff6ff',
+  leave:   '#fff1f2',
   wfh:     '#f0fdf4',
   payroll: '#fefce8',
   warning: '#fff7ed',
@@ -96,7 +96,7 @@ export default function EmpNotificationScreen() {
 }
 
 const styles = StyleSheet.create({
-  root:    { flex: 1, backgroundColor: '#f0f4ff' },
+  root:    { flex: 1, backgroundColor: '#f3f4f6' },
   content: { padding: 20, paddingBottom: 32 },
 
   headerRow: {
@@ -106,15 +106,15 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   pageTitle:   { fontSize: 22, fontWeight: '800', color: '#0f172a' },
-  unreadCount: { fontSize: 13, color: '#2563eb', fontWeight: '600', marginTop: 3 },
+  unreadCount: { fontSize: 13, color: '#e11d48', fontWeight: '600', marginTop: 3 },
   markAllBtn:  {
-    backgroundColor: '#eff6ff',
+    backgroundColor: '#fff1f2',
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 20,
     marginTop: 4,
   },
-  markAllText: { color: '#2563eb', fontWeight: '700', fontSize: 12 },
+  markAllText: { color: '#e11d48', fontWeight: '700', fontSize: 12 },
 
   emptyCard: {
     backgroundColor: '#ffffff',
@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
   },
   unreadCard: {
     borderLeftWidth: 3,
-    borderLeftColor: '#2563eb',
+    borderLeftColor: '#e11d48',
   },
   iconCircle: {
     width: 46,
@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
   notifBody:   { flex: 1 },
   notifTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   notifTitle:  { fontSize: 14, fontWeight: '800', color: '#0f172a', flex: 1 },
-  dot:         { width: 8, height: 8, borderRadius: 4, backgroundColor: '#2563eb', marginLeft: 8 },
+  dot:         { width: 8, height: 8, borderRadius: 4, backgroundColor: '#e11d48', marginLeft: 8 },
   notifMessage:{ fontSize: 13, color: '#6b7280', lineHeight: 19, marginBottom: 5 },
   notifDate:   { fontSize: 11, color: '#9ca3af' },
 });

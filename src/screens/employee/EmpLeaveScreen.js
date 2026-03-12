@@ -165,7 +165,7 @@ export default function EmpLeaveScreen() {
 }
 
 const styles = StyleSheet.create({
-  root:    { flex: 1, backgroundColor: '#f0f4ff' },
+  root:    { flex: 1, backgroundColor: '#f3f4f6' },
   content: { padding: 20, paddingBottom: 32 },
 
   headerRow: {
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   pageTitle: { fontSize: 22, fontWeight: '800', color: '#0f172a' },
-  applyBtn:  { backgroundColor: '#2563eb', paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20 },
+  applyBtn:  { backgroundColor: '#e11d48', paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20 },
   applyBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
   summaryRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
@@ -215,8 +215,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   leaveTop:   { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  typeBadge:  { backgroundColor: '#eff6ff', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
-  typeText:   { color: '#2563eb', fontWeight: '700', fontSize: 13 },
+  typeBadge:  { backgroundColor: '#fff1f2', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
+  typeText:   { color: '#e11d48', fontWeight: '700', fontSize: 13 },
   statusBadge:{ paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
   statusText: { fontWeight: '700', fontSize: 13 },
   dateRange:  { fontSize: 14, fontWeight: '700', color: '#374151', marginBottom: 4 },
@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
     backgroundColor: '#fff',
   },
-  typePillActive:     { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  typePillActive:     { backgroundColor: '#e11d48', borderColor: '#e11d48' },
   typePillText:       { fontSize: 13, fontWeight: '600', color: '#6b7280' },
   typePillTextActive: { color: '#ffffff' },
 
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
   cancelBtnText: { color: '#6b7280', fontWeight: '700', fontSize: 15 },
   submitBtn: {
     flex: 1,
-    backgroundColor: '#2563eb',
+    backgroundColor: '#e11d48',
     borderRadius: 14,
     paddingVertical: 13,
     alignItems: 'center',

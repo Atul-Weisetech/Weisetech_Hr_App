@@ -147,7 +147,7 @@ export default function EmpWfhScreen() {
 }
 
 const styles = StyleSheet.create({
-  root:    { flex: 1, backgroundColor: '#f0f4ff' },
+  root:    { flex: 1, backgroundColor: '#f3f4f6' },
   content: { padding: 20, paddingBottom: 32 },
 
   headerRow: {
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   pageTitle:    { fontSize: 22, fontWeight: '800', color: '#0f172a' },
-  applyBtn:     { backgroundColor: '#2563eb', paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20 },
+  applyBtn:     { backgroundColor: '#e11d48', paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20 },
   applyBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
   summaryRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cardTop:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  wfhIconCircle:{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#eff6ff', alignItems: 'center', justifyContent: 'center' },
+  wfhIconCircle:{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff1f2', alignItems: 'center', justifyContent: 'center' },
   wfhIcon:      { fontSize: 22 },
   statusBadge:  { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
   statusText:   { fontWeight: '700', fontSize: 13 },
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
   cancelBtnText: { color: '#6b7280', fontWeight: '700', fontSize: 15 },
   submitBtn: {
     flex: 1,
-    backgroundColor: '#2563eb',
+    backgroundColor: '#e11d48',
     borderRadius: 14,
     paddingVertical: 13,
     alignItems: 'center',

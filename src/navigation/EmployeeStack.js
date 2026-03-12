@@ -58,7 +58,7 @@ export default function EmployeeStack() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f4ff',
+    backgroundColor: '#f3f4f6',
   },
   screenContainer: {
     flex: 1,
@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
     left: '25%',
     right: '25%',
     height: 3,
-    backgroundColor: '#2563eb',
+    backgroundColor: '#e11d48',
     borderRadius: 2,
   },
   tabIcon: {
@@ -100,6 +100,6 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   tabLabelActive: {
-    color: '#2563eb',
+    color: '#e11d48',
   },
 });

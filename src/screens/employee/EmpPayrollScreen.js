@@ -78,7 +78,7 @@ export default function EmpPayrollScreen() {
 }
 
 const styles = StyleSheet.create({
-  root:    { flex: 1, backgroundColor: '#f0f4ff' },
+  root:    { flex: 1, backgroundColor: '#f3f4f6' },
   content: { padding: 20, paddingBottom: 32 },
 
   pageTitle: {
@@ -118,14 +118,14 @@ const styles = StyleSheet.create({
   payId:    { fontSize: 12, color: '#9ca3af', marginTop: 3 },
 
   netBadge: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: '#fff1f2',
     borderRadius: 14,
     paddingVertical: 10,
     paddingHorizontal: 14,
     alignItems: 'center',
   },
-  netAmount: { fontSize: 20, fontWeight: '900', color: '#2563eb' },
-  netLabel:  { fontSize: 11, color: '#60a5fa', fontWeight: '600', marginTop: 2 },
+  netAmount: { fontSize: 20, fontWeight: '900', color: '#e11d48' },
+  netLabel:  { fontSize: 11, color: '#fb7185', fontWeight: '600', marginTop: 2 },
 
   divider: {
     height: 1,
