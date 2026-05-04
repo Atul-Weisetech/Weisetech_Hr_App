@@ -9,43 +9,51 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AuthContext } from '../../state/AuthContext';
 import { AppStoreContext } from '../../state/AppStore';
 
 const STATUS_STYLE = {
   Approved: { bg: '#dcfce7', text: '#16a34a' },
   Rejected: { bg: '#fee2e2', text: '#dc2626' },
-  Pending:  { bg: '#fef9c3', text: '#92400e' },
+  Pending: { bg: '#fef9c3', text: '#92400e' },
 };
 
 export default function EmpWfhScreen() {
   const { user } = useContext(AuthContext);
   const { wfhRequests, addWfhRequest } = useContext(AppStoreContext);
+  const myEmployeeId = String(user.employeeId || user.id);
 
-  const myWfh = wfhRequests.filter(r => r.employeeId === user.id);
+  const myWfh = wfhRequests.filter(r => String(r.employeeId) === myEmployeeId);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [form, setForm] = useState({ from: '', to: '', reason: '' });
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.from.trim() || !form.to.trim()) {
       return Alert.alert('Missing fields', 'Please enter From and To dates.');
     }
-    addWfhRequest({
-      employeeId:   user.id,
-      employeeName: user.name,
-      from:         form.from.trim(),
-      to:           form.to.trim(),
-      reason:       form.reason.trim(),
-    });
-    setForm({ from: '', to: '', reason: '' });
-    setModalVisible(false);
+    try {
+      await addWfhRequest({
+        employeeId: user.employeeId || user.id,
+        employeeName: user.name,
+        from: form.from.trim(),
+        to: form.to.trim(),
+        reason: form.reason.trim(),
+      });
+      setForm({ from: '', to: '', reason: '' });
+      setModalVisible(false);
+    } catch (error) {
+      Alert.alert(
+        'Could not submit WFH request',
+        error?.response?.data?.error || 'Please try again.',
+      );
+    }
   };
 
   return (
     <View style={styles.root}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Header */}
         <View style={styles.headerRow}>
           <Text style={styles.pageTitle}>Work From Home</Text>
           <TouchableOpacity style={styles.applyBtn} onPress={() => setModalVisible(true)}>
@@ -53,7 +61,6 @@ export default function EmpWfhScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Summary */}
         <View style={styles.summaryRow}>
           {['Approved', 'Pending', 'Rejected'].map(s => (
             <View key={s} style={[styles.summaryCard, { borderTopColor: STATUS_STYLE[s].text }]}>
@@ -65,10 +72,14 @@ export default function EmpWfhScreen() {
           ))}
         </View>
 
-        {/* List */}
         {myWfh.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyIcon}>🏡</Text>
+            <MaterialCommunityIcons
+              name="home-city-outline"
+              size={44}
+              color="#9ca3af"
+              style={styles.emptyIcon}
+            />
             <Text style={styles.emptyTitle}>No WFH requests yet</Text>
             <Text style={styles.emptySubtitle}>Tap "+ Apply" to submit one.</Text>
           </View>
@@ -79,14 +90,14 @@ export default function EmpWfhScreen() {
               <View key={r.id} style={styles.wfhCard}>
                 <View style={styles.cardTop}>
                   <View style={styles.wfhIconCircle}>
-                    <Text style={styles.wfhIcon}>🏡</Text>
+                    <MaterialCommunityIcons name="home-city-outline" size={22} color="#e11d48" />
                   </View>
                   <View style={[styles.statusBadge, { backgroundColor: col.bg }]}>
                     <Text style={[styles.statusText, { color: col.text }]}>{r.status}</Text>
                   </View>
                 </View>
                 <Text style={styles.dateRange}>
-                  {r.from}  →  {r.to}
+                  {r.from}  '→'  {r.to}
                 </Text>
                 {r.reason ? <Text style={styles.reason}>{r.reason}</Text> : null}
                 <Text style={styles.wfhId}>{r.id}</Text>
@@ -96,7 +107,6 @@ export default function EmpWfhScreen() {
         )}
       </ScrollView>
 
-      {/* Apply Modal */}
       <Modal visible={modalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
@@ -147,7 +157,7 @@ export default function EmpWfhScreen() {
 }
 
 const styles = StyleSheet.create({
-  root:    { flex: 1, backgroundColor: '#f3f4f6' },
+  root: { flex: 1, backgroundColor: '#f3f4f6' },
   content: { padding: 20, paddingBottom: 32 },
 
   headerRow: {
@@ -156,8 +166,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  pageTitle:    { fontSize: 22, fontWeight: '800', color: '#0f172a' },
-  applyBtn:     { backgroundColor: '#e11d48', paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20 },
+  pageTitle: { fontSize: 22, fontWeight: '800', color: '#0f172a' },
+  applyBtn: { backgroundColor: '#e11d48', paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20 },
   applyBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
   summaryRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
@@ -182,8 +192,8 @@ const styles = StyleSheet.create({
     padding: 40,
     alignItems: 'center',
   },
-  emptyIcon:     { fontSize: 44, marginBottom: 12 },
-  emptyTitle:    { fontSize: 16, fontWeight: '700', color: '#374151', marginBottom: 6 },
+  emptyIcon: { marginBottom: 12 },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: '#374151', marginBottom: 6 },
   emptySubtitle: { fontSize: 13, color: '#9ca3af' },
 
   wfhCard: {
@@ -196,14 +206,25 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  cardTop:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  wfhIconCircle:{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff1f2', alignItems: 'center', justifyContent: 'center' },
-  wfhIcon:      { fontSize: 22 },
-  statusBadge:  { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
-  statusText:   { fontWeight: '700', fontSize: 13 },
-  dateRange:    { fontSize: 14, fontWeight: '700', color: '#374151', marginBottom: 4 },
-  reason:       { fontSize: 13, color: '#6b7280', marginBottom: 4 },
-  wfhId:        { fontSize: 11, color: '#9ca3af' },
+  cardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  wfhIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff1f2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
+  statusText: { fontWeight: '700', fontSize: 13 },
+  dateRange: { fontSize: 14, fontWeight: '700', color: '#374151', marginBottom: 4 },
+  reason: { fontSize: 13, color: '#6b7280', marginBottom: 4 },
+  wfhId: { fontSize: 11, color: '#9ca3af' },
 
   modalOverlay: {
     flex: 1,
@@ -250,3 +271,4 @@ const styles = StyleSheet.create({
   },
   submitBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 15 },
 });
+

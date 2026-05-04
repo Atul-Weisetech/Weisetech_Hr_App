@@ -9,6 +9,7 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AuthContext } from '../../state/AuthContext';
 import { AppStoreContext } from '../../state/AppStore';
 
@@ -17,38 +18,45 @@ const LEAVE_TYPES = ['Sick', 'Casual', 'Annual', 'Emergency'];
 const STATUS_STYLE = {
   Approved: { bg: '#dcfce7', text: '#16a34a' },
   Rejected: { bg: '#fee2e2', text: '#dc2626' },
-  Pending:  { bg: '#fef9c3', text: '#92400e' },
+  Pending: { bg: '#fef9c3', text: '#92400e' },
 };
 
 export default function EmpLeaveScreen() {
   const { user } = useContext(AuthContext);
   const { leaveRequests, addLeaveRequest } = useContext(AppStoreContext);
+  const myEmployeeId = String(user.employeeId || user.id);
 
-  const myLeaves = leaveRequests.filter(r => r.employeeId === user.id);
+  const myLeaves = leaveRequests.filter(r => String(r.employeeId) === myEmployeeId);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [form, setForm] = useState({ type: 'Sick', from: '', to: '', reason: '' });
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.from.trim() || !form.to.trim()) {
       return Alert.alert('Missing fields', 'Please enter From and To dates.');
     }
-    addLeaveRequest({
-      employeeId:   user.id,
-      employeeName: user.name,
-      type:         form.type,
-      from:         form.from.trim(),
-      to:           form.to.trim(),
-      reason:       form.reason.trim(),
-    });
-    setForm({ type: 'Sick', from: '', to: '', reason: '' });
-    setModalVisible(false);
+    try {
+      await addLeaveRequest({
+        employeeId: user.employeeId || user.id,
+        employeeName: user.name,
+        type: form.type,
+        from: form.from.trim(),
+        to: form.to.trim(),
+        reason: form.reason.trim(),
+      });
+      setForm({ type: 'Sick', from: '', to: '', reason: '' });
+      setModalVisible(false);
+    } catch (error) {
+      Alert.alert(
+        'Could not submit leave request',
+        error?.response?.data?.error || 'Please try again.',
+      );
+    }
   };
 
   return (
     <View style={styles.root}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Header */}
         <View style={styles.headerRow}>
           <Text style={styles.pageTitle}>Leave Requests</Text>
           <TouchableOpacity style={styles.applyBtn} onPress={() => setModalVisible(true)}>
@@ -56,7 +64,6 @@ export default function EmpLeaveScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Summary row */}
         <View style={styles.summaryRow}>
           {['Approved', 'Pending', 'Rejected'].map(s => (
             <View key={s} style={[styles.summaryCard, { borderTopColor: STATUS_STYLE[s].text }]}>
@@ -68,10 +75,14 @@ export default function EmpLeaveScreen() {
           ))}
         </View>
 
-        {/* List */}
         {myLeaves.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyIcon}>📅</Text>
+            <MaterialCommunityIcons
+              name="calendar-month-outline"
+              size={44}
+              color="#9ca3af"
+              style={styles.emptyIcon}
+            />
             <Text style={styles.emptyTitle}>No leave requests yet</Text>
             <Text style={styles.emptySubtitle}>Tap "+ Apply" to submit one.</Text>
           </View>
@@ -89,7 +100,7 @@ export default function EmpLeaveScreen() {
                   </View>
                 </View>
                 <Text style={styles.dateRange}>
-                  {r.from}  →  {r.to}
+                  {r.from}  '→'  {r.to}
                 </Text>
                 {r.reason ? <Text style={styles.reason}>{r.reason}</Text> : null}
                 <Text style={styles.leaveId}>{r.id}</Text>
@@ -99,7 +110,6 @@ export default function EmpLeaveScreen() {
         )}
       </ScrollView>
 
-      {/* Apply Modal */}
       <Modal visible={modalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
@@ -165,7 +175,7 @@ export default function EmpLeaveScreen() {
 }
 
 const styles = StyleSheet.create({
-  root:    { flex: 1, backgroundColor: '#f3f4f6' },
+  root: { flex: 1, backgroundColor: '#f3f4f6' },
   content: { padding: 20, paddingBottom: 32 },
 
   headerRow: {
@@ -175,7 +185,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   pageTitle: { fontSize: 22, fontWeight: '800', color: '#0f172a' },
-  applyBtn:  { backgroundColor: '#e11d48', paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20 },
+  applyBtn: { backgroundColor: '#e11d48', paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20 },
   applyBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
   summaryRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
@@ -200,8 +210,8 @@ const styles = StyleSheet.create({
     padding: 40,
     alignItems: 'center',
   },
-  emptyIcon:     { fontSize: 44, marginBottom: 12 },
-  emptyTitle:    { fontSize: 16, fontWeight: '700', color: '#374151', marginBottom: 6 },
+  emptyIcon: { marginBottom: 12 },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: '#374151', marginBottom: 6 },
   emptySubtitle: { fontSize: 13, color: '#9ca3af' },
 
   leaveCard: {
@@ -214,14 +224,14 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  leaveTop:   { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  typeBadge:  { backgroundColor: '#fff1f2', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
-  typeText:   { color: '#e11d48', fontWeight: '700', fontSize: 13 },
-  statusBadge:{ paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
+  leaveTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  typeBadge: { backgroundColor: '#fff1f2', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
+  typeText: { color: '#e11d48', fontWeight: '700', fontSize: 13 },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
   statusText: { fontWeight: '700', fontSize: 13 },
-  dateRange:  { fontSize: 14, fontWeight: '700', color: '#374151', marginBottom: 4 },
-  reason:     { fontSize: 13, color: '#6b7280', marginBottom: 4 },
-  leaveId:    { fontSize: 11, color: '#9ca3af' },
+  dateRange: { fontSize: 14, fontWeight: '700', color: '#374151', marginBottom: 4 },
+  reason: { fontSize: 13, color: '#6b7280', marginBottom: 4 },
+  leaveId: { fontSize: 11, color: '#9ca3af' },
 
   modalOverlay: {
     flex: 1,
@@ -248,7 +258,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9fafb',
   },
   textArea: { height: 80, textAlignVertical: 'top' },
-  typeRow:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   typePill: {
     paddingHorizontal: 14,
     paddingVertical: 7,
@@ -257,8 +267,8 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
     backgroundColor: '#fff',
   },
-  typePillActive:     { backgroundColor: '#e11d48', borderColor: '#e11d48' },
-  typePillText:       { fontSize: 13, fontWeight: '600', color: '#6b7280' },
+  typePillActive: { backgroundColor: '#e11d48', borderColor: '#e11d48' },
+  typePillText: { fontSize: 13, fontWeight: '600', color: '#6b7280' },
   typePillTextActive: { color: '#ffffff' },
 
   modalActions: { flexDirection: 'row', gap: 12, marginTop: 24 },
@@ -280,3 +290,4 @@ const styles = StyleSheet.create({
   },
   submitBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 15 },
 });
+

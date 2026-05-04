@@ -6,6 +6,7 @@ import {
   StyleSheet,
   SafeAreaView,
 } from 'react-native';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 import EmpDashboardScreen from '../screens/employee/EmpDashboardScreen';
 import EmpPayrollScreen from '../screens/employee/EmpPayrollScreen';
@@ -14,11 +15,11 @@ import EmpLeaveScreen from '../screens/employee/EmpLeaveScreen';
 import EmpWfhScreen from '../screens/employee/EmpWfhScreen';
 
 const TABS = [
-  { key: 'dashboard',    label: 'Home',    icon: '🏠', component: EmpDashboardScreen },
-  { key: 'payroll',      label: 'Payroll', icon: '💰', component: EmpPayrollScreen },
-  { key: 'notification', label: 'Alerts',  icon: '🔔', component: EmpNotificationScreen },
-  { key: 'leave',        label: 'Leave',   icon: '📅', component: EmpLeaveScreen },
-  { key: 'wfh',          label: 'WFH',     icon: '🏡', component: EmpWfhScreen },
+  { key: 'dashboard', label: 'Home', icon: 'home-outline', component: EmpDashboardScreen },
+  { key: 'payroll', label: 'Payroll', icon: 'cash-multiple', component: EmpPayrollScreen },
+  { key: 'notification', label: 'Alerts', icon: 'bell-outline', component: EmpNotificationScreen },
+  { key: 'leave', label: 'Leave', icon: 'calendar-month-outline', component: EmpLeaveScreen },
+  { key: 'wfh', label: 'WFH', icon: 'home-city-outline', component: EmpWfhScreen },
 ];
 
 export default function EmployeeStack() {
@@ -28,9 +29,7 @@ export default function EmployeeStack() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.screenContainer}>
-        {ActiveScreen && <ActiveScreen />}
-      </View>
+      <View style={styles.screenContainer}>{ActiveScreen && <ActiveScreen />}</View>
 
       <View style={styles.tabBar}>
         {TABS.map(tab => {
@@ -43,10 +42,13 @@ export default function EmployeeStack() {
               activeOpacity={0.7}
             >
               {isActive && <View style={styles.tabIndicator} />}
-              <Text style={styles.tabIcon}>{tab.icon}</Text>
-              <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
-                {tab.label}
-              </Text>
+              <MaterialCommunityIcons
+                name={tab.icon}
+                size={20}
+                color={isActive ? '#e11d48' : '#9ca3af'}
+                style={styles.tabIcon}
+              />
+              <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>{tab.label}</Text>
             </TouchableOpacity>
           );
         })}
@@ -91,7 +93,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   tabIcon: {
-    fontSize: 20,
+    marginTop: 2,
   },
   tabLabel: {
     fontSize: 11,

@@ -126,3 +126,52 @@ dependencies {
         implementation jscFlavor
     }
 }
+
+// Windows/OneDrive fix: CMake hardlinks NDK .so files into the build output
+// directory. If any hardlink sibling lives under an OneDrive-watched folder,
+// OneDrive stamps the shared NTFS inode with the ReparsePoint attribute.
+// Java's Files.isRegularFile() returns false for ReparsePoint files, causing
+// Gradle's incremental snapshot to throw:
+//   "Cannot snapshot … libc++_shared.so: not a regular file"
+// Fix 1 – doNotTrackState() suppresses the snapshot (Gradle's own suggestion).
+// Fix 2 – doLast replaces hardlinks with real byte-copies (pure Java streams,
+//          no Gradle exec) so downstream strip/package tasks see a normal file.
+if (System.getProperty("os.name").toLowerCase().contains("windows")) {
+    tasks.whenTaskAdded { task ->
+        if (task.name.matches('buildCMake.*')) {
+            task.doNotTrackState(
+                "NDK .so hardlinks can inherit a ReparsePoint attribute on Windows " +
+                "(OneDrive stamps the shared inode). Java cannot snapshot such files. " +
+                "Disabling state tracking per Gradle's own error recommendation."
+            )
+            task.doLast {
+                // Replace every hardlinked .so with a real byte-copy so that
+                // downstream tasks (strip, package) see a normal regular file.
+                def soRoot = new File("C:/b/hr/intermediates/cxx")
+                if (!soRoot.exists()) return
+                soRoot.eachFileRecurse { f ->
+                    if (!f.name.endsWith(".so")) return
+                    def tmp = new File(f.parent, f.name + ".realtmp")
+                    try {
+                        // FileInputStream/FileOutputStream work on Windows even
+                        // when File.isFile() returns false for ReparsePoint files.
+                        def inStream  = new java.io.FileInputStream(f)
+                        def bytes     = inStream.bytes
+                        inStream.close()
+                        def outStream = new java.io.FileOutputStream(tmp)
+                        outStream.write(bytes)
+                        outStream.close()
+                        if (tmp.length() > 0) {
+                            f.delete()
+                            tmp.renameTo(f)
+                        } else {
+                            tmp.delete()
+                        }
+                    } catch (Exception ignored) {
+                        tmp.delete()
+                    }
+                }
+            }
+        }
+    }
+}

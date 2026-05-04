@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+﻿import React, { useContext, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -8,38 +8,30 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Image, 
+  Image,
+  Alert,
 } from 'react-native';
 import { AuthContext } from '../state/AuthContext';
+import { apiBaseURL } from '../api/hrApi';
 
 export default function LoginScreen() {
-  const { signIn } = useContext(AuthContext);
+  const { signIn, isLoading } = useContext(AuthContext);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  // Mock users — replace with real API call when backend is ready
-  const MOCK_USERS = [
-    { id: 'ADMIN-001', name: 'HR Admin', email: 'admin@company.com', role: 'admin' },
-    { id: 'EMP-001', name: 'Rajvi Gajjar', email: 'rajvi@company.com', role: 'employee' },
-    { id: 'EMP-002', name: 'Atul Sengar', email: 'atul@gmail.com', role: 'employee' },
-    { id: 'EMP-003', name: 'Om Gajjar', email: 'omgajjar41@gmail.com', role: 'employee' },
-  ];
+  const onLoginPress = async () => {
+    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedPassword = password.trim();
 
-  const onLoginPress = () => {
-    const found = MOCK_USERS.find(
-      u => u.email.toLowerCase() === email.trim().toLowerCase(),
-    );
-    if (found) {
-      signIn(found);
-    } else if (email.trim()) {
-      // fallback: treat unknown email as admin if contains 'admin', else employee
-      signIn({
-        id: 'EMP-000',
-        name: email.split('@')[0],
-        email: email.trim(),
-        role: email.toLowerCase().includes('admin') ? 'admin' : 'employee',
-      });
+    if (!trimmedEmail || !trimmedPassword) {
+      Alert.alert('Missing details', 'Please enter email and password.');
+      return;
+    }
+
+    const result = await signIn({ email: trimmedEmail, password: trimmedPassword });
+    if (!result.ok) {
+      Alert.alert('Login failed', result.message);
     }
   };
 
@@ -53,18 +45,19 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-       <View style={styles.logoContainer}>
-        <Image
-       source={require('../assets/weisetechLogo.png')} 
-       style={styles.logoImage}
-       resizeMode="contain"
-       />
+        <View style={styles.logoContainer}>
+          <Image
+            source={require('../assets/weisetechLogo.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
         </View>
         <View style={styles.card}>
           <Text style={styles.signInTitle}>Sign In</Text>
+          <Text style={styles.helperText}>API: {apiBaseURL}</Text>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>Email or Username</Text>
             <TextInput
               style={styles.input}
               placeholder="you@example.com"
@@ -82,7 +75,7 @@ export default function LoginScreen() {
             <View style={styles.passwordWrapper}>
               <TextInput
                 style={[styles.input, styles.passwordInput]}
-                placeholder="••••••••"
+                placeholder="********"
                 placeholderTextColor="#9ca3af"
                 value={password}
                 onChangeText={setPassword}
@@ -94,17 +87,20 @@ export default function LoginScreen() {
                 onPress={() => setShowPassword(prev => !prev)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Text style={styles.eyeText}>{showPassword ? '🙈' : '👁'}</Text>
+                <Text style={styles.eyeText}>{showPassword ? 'Hide' : 'Show'}</Text>
               </TouchableOpacity>
             </View>
           </View>
 
           <TouchableOpacity
-            style={styles.loginButton}
+            style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
             activeOpacity={0.85}
             onPress={onLoginPress}
+            disabled={isLoading}
           >
-            <Text style={styles.loginButtonText}>Login</Text>
+            <Text style={styles.loginButtonText}>
+              {isLoading ? 'Logging in...' : 'Login'}
+            </Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -124,20 +120,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 32,
   },
-  brandRow: {
-    flexDirection: 'row',
+  logoContainer: {
     alignItems: 'center',
     marginBottom: 28,
   },
- logoContainer: {
-  alignItems: 'center',
-  marginBottom: 28,
-},
-
-logoImage: {
-  width: 200,
-  height: 110,
-},
+  logoImage: {
+    width: 200,
+    height: 110,
+  },
   card: {
     width: '100%',
     maxWidth: 420,
@@ -158,7 +148,14 @@ logoImage: {
     fontWeight: '800',
     color: '#1d4ed8',
     textAlign: 'center',
-    marginBottom: 22,
+    marginBottom: 8,
+  },
+  helperText: {
+    textAlign: 'center',
+    color: '#64748b',
+    marginBottom: 16,
+    fontSize: 11,
+    fontWeight: '600',
   },
   fieldGroup: {
     marginBottom: 18,
@@ -183,7 +180,7 @@ logoImage: {
     position: 'relative',
   },
   passwordInput: {
-    paddingRight: 44,
+    paddingRight: 64,
   },
   eyeButton: {
     position: 'absolute',
@@ -193,7 +190,9 @@ logoImage: {
     justifyContent: 'center',
   },
   eyeText: {
-    fontSize: 20,
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '700',
   },
   loginButton: {
     marginTop: 10,
@@ -203,10 +202,12 @@ logoImage: {
     justifyContent: 'center',
     backgroundColor: '#e11d48',
   },
+  loginButtonDisabled: {
+    opacity: 0.75,
+  },
   loginButtonText: {
     fontSize: 16,
     fontWeight: '800',
     color: '#ffffff',
   },
 });
-

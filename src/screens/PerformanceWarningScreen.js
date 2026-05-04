@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   Modal,
@@ -12,27 +12,31 @@ import {
 import Screen from '../components/Screen';
 import Card from '../components/Card';
 import PrimaryButton from '../components/PrimaryButton';
-import { employees } from '../data/mockData';
 import { AppStoreContext } from '../state/AppStore';
 
 export default function PerformanceWarningScreen() {
-  const { warnings, addWarning } = useContext(AppStoreContext);
+  const { warnings, addWarning, employees } = useContext(AppStoreContext);
 
-  const [employeeId, setEmployeeId] = useState(employees[0]?.id);
+  const [employeeId, setEmployeeId] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [date, setDate] = useState('2026-02-23');
   const [severity, setSeverity] = useState('Medium'); // Low | Medium | High
 
-  const selectedEmployee = useMemo(
-    () => employees.find(e => e.id === employeeId) || employees[0],
-    [employeeId],
-  );
+  const selectedEmployee = useMemo(() => {
+    if (!employees.length) return null;
+    return employees.find(e => e.id === employeeId) || employees[0];
+  }, [employeeId, employees]);
 
-  const onIssue = () => {
-    const id = `WARN-${Date.now()}`;
-    addWarning({
-      id,
+  useEffect(() => {
+    if (!employeeId && employees.length) {
+      setEmployeeId(employees[0].id);
+    }
+  }, [employeeId, employees]);
+
+  const onIssue = async () => {
+    if (!selectedEmployee) return;
+    await addWarning({
       employeeId: selectedEmployee.id,
       employeeName: selectedEmployee.name,
       reason: reason.trim() || 'Performance issue',
@@ -58,7 +62,7 @@ export default function PerformanceWarningScreen() {
           style={({ pressed }) => [styles.selector, pressed && { opacity: 0.9 }]}
         >
           <Text style={styles.selectorText}>
-            {selectedEmployee.name} ({selectedEmployee.id})
+            {selectedEmployee ? `${selectedEmployee.name} (${selectedEmployee.id})` : 'Select employee'}
           </Text>
           <Text style={styles.chevron}>▾</Text>
         </Pressable>
@@ -311,4 +315,3 @@ const styles = StyleSheet.create({
   modalRowTitle: { color: '#0f172a', fontWeight: '900' },
   modalRowSub: { marginTop: 2, color: '#64748b', fontWeight: '800', fontSize: 12 },
 });
-

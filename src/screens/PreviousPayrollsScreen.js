@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import Screen from '../components/Screen';
 import Card from '../components/Card';
-import { employees } from '../data/mockData';
 import { AppStoreContext } from '../state/AppStore';
 
 function net(p) {
@@ -22,7 +21,7 @@ function money(n) {
 }
 
 export default function PreviousPayrollsScreen() {
-  const { payrolls } = useContext(AppStoreContext);
+  const { payrolls, employees } = useContext(AppStoreContext);
   const [employeeId, setEmployeeId] = useState('ALL');
   const [month, setMonth] = useState('ALL');
   const [open, setOpen] = useState(false);
@@ -284,4 +283,3 @@ const styles = StyleSheet.create({
   },
   closeBtnText: { color: '#fff', fontWeight: '900' },
 });
-
