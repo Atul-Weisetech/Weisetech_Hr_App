@@ -4,15 +4,15 @@ import {
   DrawerContentScrollView,
   DrawerItemList,
 } from '@react-navigation/drawer';
-import { TouchableOpacity, Text, View } from 'react-native';
+import { TouchableOpacity, Text, View, Alert } from 'react-native';
 import { AuthContext } from '../state/AuthContext';
 
 import EmployeeDetailsScreen from '../screens/EmployeeDetailsScreen';
 import ManagePayrollScreen from '../screens/ManagePayrollScreen';
-import PreviousPayrollsScreen from '../screens/PreviousPayrollsScreen';
 import ManageLeaveRequestScreen from '../screens/ManageLeaveRequestScreen';
 import ManageWfhScreen from '../screens/ManageWfhScreen';
 import PerformanceWarningScreen from '../screens/PerformanceWarningScreen';
+import HolidayScreen from '../screens/HolidayScreen';
 
 const Drawer = createDrawerNavigator();
 
@@ -37,19 +37,38 @@ function CustomDrawerContent(props) {
           borderTopColor: '#e5e7eb',
         }}
       >
-        <TouchableOpacity
-          onPress={signOut}
-          activeOpacity={0.85}
-          style={{
-            backgroundColor: '#ef4444',
-            borderRadius: 10,
-            paddingVertical: 10,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text style={{ color: '#fff', fontWeight: '700' }}>Logout</Text>
-        </TouchableOpacity>
+       <TouchableOpacity
+  onPress={() => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: () => signOut(),
+        },
+      ],
+      { cancelable: true }
+    );
+  }}
+  activeOpacity={0.85}
+  style={{
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  }}
+>
+  <Text style={{ color: '#fff', fontWeight: '700' }}>
+    Logout
+  </Text>
+</TouchableOpacity>
       </View>
     </DrawerContentScrollView>
   );
@@ -104,11 +123,6 @@ export default function AppDrawer() {
         options={{ drawerLabel: 'Manage Payroll' }}
       />
       <Drawer.Screen
-        name="PreviousPayrolls"
-        component={PreviousPayrollsScreen}
-        options={{ drawerLabel: 'Previous Payrolls' }}
-      />
-      <Drawer.Screen
         name="ManageLeaveRequest"
         component={ManageLeaveRequestScreen}
         options={{ drawerLabel: 'Manage Leave Request' }}
@@ -122,6 +136,11 @@ export default function AppDrawer() {
         name="PerformanceWarning"
         component={PerformanceWarningScreen}
         options={{ drawerLabel: 'Performance Warning' }}
+      />
+      <Drawer.Screen
+        name="Holidays"
+        component={HolidayScreen}
+        options={{ drawerLabel: 'Holidays' }}
       />
     </Drawer.Navigator>
   );

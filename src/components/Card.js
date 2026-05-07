@@ -1,9 +1,11 @@
 import React from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
-export default function Card({ children, style }) {
+function Card({ children, style }) {
   return <View style={[styles.card, style]}>{children}</View>;
 }
+
+export default React.memo(Card);
 
 const styles = StyleSheet.create({
   card: {
@@ -25,4 +27,3 @@ const styles = StyleSheet.create({
     }),
   },
 });
-

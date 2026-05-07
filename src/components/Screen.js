@@ -1,9 +1,11 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 
-export default function Screen({ children, style }) {
+function Screen({ children, style }) {
   return <View style={[styles.root, style]}>{children}</View>;
 }
+
+export default React.memo(Screen);
 
 const styles = StyleSheet.create({
   root: {
@@ -12,4 +14,3 @@ const styles = StyleSheet.create({
     padding: 16,
   },
 });
-

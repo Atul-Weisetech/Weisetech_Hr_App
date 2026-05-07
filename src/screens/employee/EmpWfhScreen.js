@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+﻿import React, { useContext, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -11,23 +11,66 @@ import {
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AuthContext } from '../../state/AuthContext';
-import { AppStoreContext } from '../../state/AppStore';
+import { AppStoreContext, AppStoreActionsContext } from '../../state/AppStore';
+
+const FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'approved', label: 'Approved' },
+  { key: 'requested', label: 'Pending' },
+  { key: 'declined', label: 'Declined' },
+  { key: 'cancel_requested', label: 'Cancel Requested' },
+  { key: 'canceled', label: 'Canceled' },
+];
 
 const STATUS_STYLE = {
   Approved: { bg: '#dcfce7', text: '#16a34a' },
+  Declined: { bg: '#fee2e2', text: '#dc2626' },
   Rejected: { bg: '#fee2e2', text: '#dc2626' },
   Pending: { bg: '#fef9c3', text: '#92400e' },
+  Canceled: { bg: '#e5e7eb', text: '#475569' },
+  'Cancel Requested': { bg: '#ffedd5', text: '#c2410c' },
 };
+
+function calculateDaysInclusive(fromDate, toDate) {
+  const start = new Date(fromDate);
+  const end = new Date(toDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+  return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86400000) + 1);
+}
+ function formatDate(dataString){
+  return new Date(dataString).toISOString().split('T')[0];
+ }
+ 
+
+function formatStatusFromRaw(rawStatus, fallbackStatus) {
+  if (rawStatus === 'approved') return 'Approved';
+  if (rawStatus === 'declined') return 'Declined';
+  if (rawStatus === 'cancel_requested') return 'Cancel Requested';
+  if (rawStatus === 'canceled') return 'Canceled';
+  if (rawStatus === 'requested') return 'Pending';
+  if (fallbackStatus === 'Rejected') return 'Declined';
+  return fallbackStatus || 'Pending';
+}
 
 export default function EmpWfhScreen() {
   const { user } = useContext(AuthContext);
-  const { wfhRequests, addWfhRequest } = useContext(AppStoreContext);
+  const { wfhRequests } = useContext(AppStoreContext);
+  const { addWfhRequest, updateWfhStatus } = useContext(AppStoreActionsContext);
   const myEmployeeId = String(user.employeeId || user.id);
 
-  const myWfh = wfhRequests.filter(r => String(r.employeeId) === myEmployeeId);
+  const myWfh = useMemo(
+    () => wfhRequests.filter(r => String(r.employeeId) === myEmployeeId),
+    [wfhRequests, myEmployeeId],
+  );
 
   const [modalVisible, setModalVisible] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('all');
   const [form, setForm] = useState({ from: '', to: '', reason: '' });
+
+  const filteredWfh = useMemo(() => {
+    if (activeFilter === 'all') return myWfh;
+    return myWfh.filter(r => (r.rawStatus || '').toLowerCase() === activeFilter);
+  }, [myWfh, activeFilter]);
 
   const handleSubmit = async () => {
     if (!form.from.trim() || !form.to.trim()) {
@@ -51,6 +94,15 @@ export default function EmpWfhScreen() {
     }
   };
 
+  const handleCancelRequest = async requestId => {
+    try {
+      await updateWfhStatus(requestId, 'Pending');
+      Alert.alert('Sent', 'Cancel request submitted for review.');
+    } catch (error) {
+      Alert.alert('Could not request cancel', error?.response?.data?.error || 'Please try again.');
+    }
+  };
+
   return (
     <View style={styles.root}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -62,17 +114,40 @@ export default function EmpWfhScreen() {
         </View>
 
         <View style={styles.summaryRow}>
-          {['Approved', 'Pending', 'Rejected'].map(s => (
+          {['Approved', 'Pending', 'Declined'].map(s => (
             <View key={s} style={[styles.summaryCard, { borderTopColor: STATUS_STYLE[s].text }]}>
               <Text style={[styles.summaryCount, { color: STATUS_STYLE[s].text }]}>
-                {myWfh.filter(r => r.status === s).length}
+                {
+                  myWfh.filter(
+                    r => formatStatusFromRaw(r.rawStatus, r.status).toLowerCase() === s.toLowerCase(),
+                  ).length
+                }
               </Text>
               <Text style={styles.summaryLabel}>{s}</Text>
             </View>
           ))}
         </View>
 
-        {myWfh.length === 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          {FILTERS.map(item => (
+            <TouchableOpacity
+              key={item.key}
+              style={[styles.filterPill, activeFilter === item.key && styles.filterPillActive]}
+              onPress={() => setActiveFilter(item.key)}
+            >
+              <Text
+                style={[
+                  styles.filterPillText,
+                  activeFilter === item.key && styles.filterPillTextActive,
+                ]}
+              >
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {filteredWfh.length === 0 ? (
           <View style={styles.emptyCard}>
             <MaterialCommunityIcons
               name="home-city-outline"
@@ -80,27 +155,71 @@ export default function EmpWfhScreen() {
               color="#9ca3af"
               style={styles.emptyIcon}
             />
-            <Text style={styles.emptyTitle}>No WFH requests yet</Text>
-            <Text style={styles.emptySubtitle}>Tap "+ Apply" to submit one.</Text>
+            <Text style={styles.emptyTitle}>No WFH requests found</Text>
+            <Text style={styles.emptySubtitle}>Try another filter or tap "+ Apply".</Text>
           </View>
         ) : (
-          myWfh.map(r => {
-            const col = STATUS_STYLE[r.status] || STATUS_STYLE.Pending;
+          filteredWfh.map(r => {
+            const statusLabel = formatStatusFromRaw(r.rawStatus, r.status);
+            const col = STATUS_STYLE[statusLabel] || STATUS_STYLE.Pending;
+            const canRequestCancel = (r.rawStatus || '').toLowerCase() === 'approved';
+
+            const actionText =
+              (r.rawStatus || '').toLowerCase() === 'cancel_requested'
+                ? 'Cancel In Review'
+                : (r.rawStatus || '').toLowerCase() === 'canceled'
+                  ? 'Canceled'
+                  : (r.rawStatus || '').toLowerCase() === 'declined'
+                    ? 'No Action'
+                    : (r.rawStatus || '').toLowerCase() === 'requested'
+                      ? 'Waiting Approval'
+                      : 'Request Cancel';
+
             return (
               <View key={r.id} style={styles.wfhCard}>
-                <View style={styles.cardTop}>
-                  <View style={styles.wfhIconCircle}>
-                    <MaterialCommunityIcons name="home-city-outline" size={22} color="#e11d48" />
+                <View style={styles.wfhLine}>
+                  <View style={styles.typeBadge}>
+                    <Text style={styles.typeText}>WFH</Text>
                   </View>
                   <View style={[styles.statusBadge, { backgroundColor: col.bg }]}>
-                    <Text style={[styles.statusText, { color: col.text }]}>{r.status}</Text>
+                    <Text style={[styles.statusText, { color: col.text }]}>{statusLabel}</Text>
                   </View>
                 </View>
-                <Text style={styles.dateRange}>
-                  {r.from}  '→'  {r.to}
-                </Text>
-                {r.reason ? <Text style={styles.reason}>{r.reason}</Text> : null}
-                <Text style={styles.wfhId}>{r.id}</Text>
+
+                <View style={styles.wfhLine}>
+                  <Text style={styles.dateRange}>
+  {formatDate(r.from)} - {formatDate(r.to)}
+</Text>
+                  <Text style={styles.daysText}>Days: {calculateDaysInclusive(r.from, r.to)}</Text>
+                </View>
+
+                <View style={styles.lastLine}>
+                  <Text style={styles.reason} numberOfLines={1}>
+                    Description: {r.reason || '-'}
+                  </Text>
+                  <View style={styles.lastLineBottom}>
+                    <Text style={styles.reviewedByText}>Reviewed By: {r.reviewedBy || 'Smart One'}</Text>
+                    {canRequestCancel ? (
+                      <TouchableOpacity
+                        style={styles.actionBtn}
+                        onPress={() =>
+                          Alert.alert(
+                            'Request Cancel',
+                            'Do you want to request cancellation of this WFH?',
+                            [
+                              { text: 'No', style: 'cancel' },
+                              { text: 'Yes', onPress: () => handleCancelRequest(r.id) },
+                            ],
+                          )
+                        }
+                      >
+                        <Text style={styles.actionBtnText}>Request Cancel</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <Text style={styles.actionText}>Action: {actionText}</Text>
+                    )}
+                  </View>
+                </View>
               </View>
             );
           })
@@ -170,7 +289,7 @@ const styles = StyleSheet.create({
   applyBtn: { backgroundColor: '#e11d48', paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20 },
   applyBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
-  summaryRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  summaryRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
   summaryCard: {
     flex: 1,
     backgroundColor: '#ffffff',
@@ -185,6 +304,20 @@ const styles = StyleSheet.create({
   },
   summaryCount: { fontSize: 24, fontWeight: '900' },
   summaryLabel: { fontSize: 11, color: '#6b7280', fontWeight: '600', marginTop: 3 },
+
+  filterRow: { gap: 8, marginBottom: 14, paddingRight: 10 },
+  filterPill: {
+    height: 34,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
+    justifyContent: 'center',
+  },
+  filterPillActive: { backgroundColor: '#e11d48', borderColor: '#e11d48' },
+  filterPillText: { fontSize: 12, color: '#334155', fontWeight: '700' },
+  filterPillTextActive: { color: '#ffffff' },
 
   emptyCard: {
     backgroundColor: '#ffffff',
@@ -205,26 +338,41 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+    gap: 10,
   },
-  cardTop: {
+  wfhLine: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    gap: 10,
+    flexWrap: 'wrap',
   },
-  wfhIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#fff1f2',
+  typeBadge: { backgroundColor: '#fff1f2', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
+  typeText: { color: '#e11d48', fontWeight: '700', fontSize: 13 },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
+  statusText: { fontWeight: '700', fontSize: 13 },
+  dateRange: { fontSize: 13, fontWeight: '700', color: '#374151' },
+  daysText: { fontSize: 13, fontWeight: '700', color: '#475569' },
+  lastLine: { gap: 8 },
+  reason: { fontSize: 13, color: '#6b7280' },
+  lastLineBottom: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  reviewedByText: { fontSize: 12, color: '#475569', fontWeight: '600' },
+  actionText: { fontSize: 12, color: '#64748b', fontWeight: '700' },
+  actionBtn: {
+    backgroundColor: '#e11d48',
+    height: 30,
+    borderRadius: 15,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  statusBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
-  statusText: { fontWeight: '700', fontSize: 13 },
-  dateRange: { fontSize: 14, fontWeight: '700', color: '#374151', marginBottom: 4 },
-  reason: { fontSize: 13, color: '#6b7280', marginBottom: 4 },
-  wfhId: { fontSize: 11, color: '#9ca3af' },
+  actionBtnText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
 
   modalOverlay: {
     flex: 1,
@@ -271,4 +419,3 @@ const styles = StyleSheet.create({
   },
   submitBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 15 },
 });
-

@@ -1,13 +1,33 @@
-import React, { createContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useEffect, useMemo, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import hrApi from '../api/hrApi';
+
+const SESSION_KEY = '@hr_app_session';
 
 export const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(true); // true until AsyncStorage is checked
 
-  const signIn = async ({ email, password }) => {
+  // On mount: restore session from AsyncStorage
+  useEffect(() => {
+    AsyncStorage.getItem(SESSION_KEY)
+      .then(raw => {
+        if (raw) {
+          try {
+            setUser(JSON.parse(raw));
+          } catch {
+            AsyncStorage.removeItem(SESSION_KEY);
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsRestoring(false));
+  }, []);
+
+  const signIn = useCallback(async ({ email, password }) => {
     setIsLoading(true);
     try {
       const { data } = await hrApi.post('/login', { email, password });
@@ -23,7 +43,6 @@ export function AuthProvider({ children }) {
         email;
       let resolvedDesignation = employee?.designation || apiUser?.designation || '';
 
-      // Fallback: if backend login response has no employee object, resolve by email.
       if (!resolvedEmployeeId && apiUser?.email_address) {
         try {
           const { data: employeeList } = await hrApi.get(
@@ -56,6 +75,8 @@ export function AuthProvider({ children }) {
         designation: resolvedDesignation,
       };
 
+      // Persist session
+      await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(normalizedUser));
       setUser(normalizedUser);
       return { ok: true, user: normalizedUser };
     } catch (error) {
@@ -77,17 +98,16 @@ export function AuthProvider({ children }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  const signOut = useCallback(async () => {
+    await AsyncStorage.removeItem(SESSION_KEY);
+    setUser(null);
+  }, []);
 
   const value = useMemo(
-    () => ({
-      user,
-      isLoading,
-      isSignedIn: !!user,
-      signIn,
-      signOut: () => setUser(null),
-    }),
-    [user, isLoading],
+    () => ({ user, isLoading, isRestoring, isSignedIn: !!user, signIn, signOut }),
+    [user, isLoading, isRestoring, signIn, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

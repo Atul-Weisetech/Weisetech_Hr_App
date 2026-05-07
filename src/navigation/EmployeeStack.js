@@ -17,7 +17,7 @@ import EmpWfhScreen from '../screens/employee/EmpWfhScreen';
 const TABS = [
   { key: 'dashboard', label: 'Home', icon: 'home-outline', component: EmpDashboardScreen },
   { key: 'payroll', label: 'Payroll', icon: 'cash-multiple', component: EmpPayrollScreen },
-  { key: 'notification', label: 'Alerts', icon: 'bell-outline', component: EmpNotificationScreen },
+  { key: 'notification', label: 'Notification', icon: 'bell-outline', component: EmpNotificationScreen },
   { key: 'leave', label: 'Leave', icon: 'calendar-month-outline', component: EmpLeaveScreen },
   { key: 'wfh', label: 'WFH', icon: 'home-city-outline', component: EmpWfhScreen },
 ];

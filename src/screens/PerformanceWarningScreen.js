@@ -3,7 +3,6 @@ import {
   FlatList,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -12,16 +11,22 @@ import {
 import Screen from '../components/Screen';
 import Card from '../components/Card';
 import PrimaryButton from '../components/PrimaryButton';
-import { AppStoreContext } from '../state/AppStore';
+import { AppStoreContext, AppStoreActionsContext } from '../state/AppStore';
+
+const DEFAULT_WARNING_TYPES = ['Low', 'Medium', 'High'];
 
 export default function PerformanceWarningScreen() {
-  const { warnings, addWarning, employees } = useContext(AppStoreContext);
+  const { warnings, employees } = useContext(AppStoreContext);
+  const { addWarning } = useContext(AppStoreActionsContext);
 
+  const [showWarningForm, setShowWarningForm] = useState(false);
   const [employeeId, setEmployeeId] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [date, setDate] = useState('2026-02-23');
-  const [severity, setSeverity] = useState('Medium'); // Low | Medium | High
+  const [severity, setSeverity] = useState('Medium');
+  const [warningTypes, setWarningTypes] = useState(DEFAULT_WARNING_TYPES);
+  const [newWarningType, setNewWarningType] = useState('');
 
   const selectedEmployee = useMemo(() => {
     if (!employees.length) return null;
@@ -34,16 +39,42 @@ export default function PerformanceWarningScreen() {
     }
   }, [employeeId, employees]);
 
+  useEffect(() => {
+    if (severity && !reason.trim()) {
+      setReason(`${severity} warning`);
+    }
+  }, [severity, reason]);
+
+  const addWarningType = () => {
+    const nextType = newWarningType.trim();
+    if (!nextType) return;
+
+    const alreadyExists = warningTypes.some(
+      type => type.toLowerCase() === nextType.toLowerCase(),
+    );
+    if (alreadyExists) {
+      setNewWarningType('');
+      return;
+    }
+
+    setWarningTypes(prev => [...prev, nextType]);
+    setSeverity(nextType);
+    setReason(`${nextType} warning`);
+    setNewWarningType('');
+  };
+
   const onIssue = async () => {
     if (!selectedEmployee) return;
     await addWarning({
       employeeId: selectedEmployee.id,
       employeeName: selectedEmployee.name,
-      reason: reason.trim() || 'Performance issue',
+      reason: reason.trim() || `${severity} warning`,
       date,
       severity,
     });
     setReason('');
+    setSeverity('Medium');
+    setShowWarningForm(false);
   };
 
   return (
@@ -54,103 +85,143 @@ export default function PerformanceWarningScreen() {
       </Card>
 
       <Card style={{ marginBottom: 12 }}>
-        <Text style={styles.sectionTitle}>Issue Warning</Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Issue Warning</Text>
+          <Pressable
+            onPress={() => setShowWarningForm(prev => !prev)}
+            style={({ pressed }) => [styles.topActionBtn, pressed && { opacity: 0.9 }]}
+          >
+            <Text style={styles.topActionBtnText}>
+              {showWarningForm ? 'Close Form' : 'Create Warning'}
+            </Text>
+          </Pressable>
+        </View>
 
-        <Text style={styles.label}>Employee</Text>
-        <Pressable
-          onPress={() => setPickerOpen(true)}
-          style={({ pressed }) => [styles.selector, pressed && { opacity: 0.9 }]}
-        >
-          <Text style={styles.selectorText}>
-            {selectedEmployee ? `${selectedEmployee.name} (${selectedEmployee.id})` : 'Select employee'}
-          </Text>
-          <Text style={styles.chevron}>â–¾</Text>
-        </Pressable>
+        <Text style={styles.label}>Manage Warning Type</Text>
+        <View style={styles.addTypeRow}>
+          <TextInput
+            value={newWarningType}
+            onChangeText={setNewWarningType}
+            style={[styles.input, styles.typeInput]}
+            placeholder="Add warning type"
+            placeholderTextColor="#9ca3af"
+          />
+          <Pressable
+            onPress={addWarningType}
+            style={({ pressed }) => [styles.addTypeBtn, pressed && { opacity: 0.9 }]}
+          >
+            <Text style={styles.addTypeBtnText}>Add Type</Text>
+          </Pressable>
+        </View>
 
-        <Text style={styles.label}>Reason</Text>
-        <TextInput
-          value={reason}
-          onChangeText={setReason}
-          style={styles.input}
-          placeholder="Enter warning reason..."
-          placeholderTextColor="#9ca3af"
-        />
+        <View style={styles.pillsRowWrap}>
+          {warningTypes.map(type => (
+            <Pressable
+              key={type}
+              onPress={() => {
+                setSeverity(type);
+                setReason(`${type} warning`);
+              }}
+              style={({ pressed }) => [
+                styles.pill,
+                severity === type && styles.pillActive,
+                pressed && { opacity: 0.9 },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.pillText,
+                  severity === type && styles.pillTextActive,
+                ]}
+              >
+                {type}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
 
-        <View style={styles.grid}>
-          <View style={styles.col}>
-            <Text style={styles.label}>Date (YYYY-MM-DD)</Text>
+        {showWarningForm ? (
+          <>
+            <Text style={styles.label}>Employee</Text>
+            <Pressable
+              onPress={() => setPickerOpen(true)}
+              style={({ pressed }) => [styles.selector, pressed && { opacity: 0.9 }]}
+            >
+              <Text style={styles.selectorText}>
+                {selectedEmployee
+                  ? `${selectedEmployee.name} (${selectedEmployee.id})`
+                  : 'Select employee'}
+              </Text>
+              <Text style={styles.chevron}>?</Text>
+            </Pressable>
+
+            <Text style={styles.label}>Reason</Text>
             <TextInput
-              value={date}
-              onChangeText={setDate}
+              value={reason}
+              onChangeText={setReason}
               style={styles.input}
-              placeholder="2026-02-23"
+              placeholder="Enter warning reason..."
               placeholderTextColor="#9ca3af"
+              multiline
             />
-          </View>
-          <View style={styles.col}>
-            <Text style={styles.label}>Severity</Text>
-            <View style={styles.pillsRow}>
-              {['Low', 'Medium', 'High'].map(s => (
-                <Pressable
-                  key={s}
-                  onPress={() => setSeverity(s)}
-                  style={({ pressed }) => [
-                    styles.pill,
-                    severity === s && styles.pillActive,
-                    pressed && { opacity: 0.9 },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.pillText,
-                      severity === s && styles.pillTextActive,
-                    ]}
-                  >
-                    {s}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        </View>
 
-        <View style={{ marginTop: 12 }}>
-          <PrimaryButton title="Issue Warning" onPress={onIssue} />
-        </View>
+            <View style={styles.grid}>
+              <View style={styles.col}>
+                <Text style={styles.label}>Date (YYYY-MM-DD)</Text>
+                <TextInput
+                  value={date}
+                  onChangeText={setDate}
+                  style={styles.input}
+                  placeholder="2026-02-23"
+                  placeholderTextColor="#9ca3af"
+                />
+              </View>
+            </View>
+
+            <View style={{ marginTop: 12 }}>
+              <PrimaryButton title="Issue Warning" onPress={onIssue} />
+            </View>
+          </>
+        ) : null}
       </Card>
 
       <Card style={{ flex: 1 }}>
         <Text style={styles.sectionTitle}>Previous Warnings</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tableScrollContent}
-        >
-          <View style={styles.tableContainer}>
-            <View style={styles.tableHeader}>
-              {['Employee', 'Reason', 'Date', 'Severity'].map(h => (
-                <Text key={h} style={styles.th}>
-                  {h}
-                </Text>
-              ))}
-            </View>
-            <FlatList
-              data={warnings}
-              keyExtractor={item => item.id}
-              renderItem={({ item }) => (
-                <View style={styles.row}>
-                  <Text style={styles.td}>{item.employeeName}</Text>
-                  <Text style={styles.td} numberOfLines={1}>
-                    {item.reason}
+        <FlatList
+          data={warnings}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.warningListContent}
+          renderItem={({ item }) => {
+            const warningType =
+              item.warningTypes?.[0]?.warning_type ||
+              item.warningTypes?.[0] ||
+              item.severity ||
+              'Warning';
+
+            return (
+              <View style={styles.warningCard}>
+                <View style={styles.warningCardTopRow}>
+                  <Text style={styles.warningLineOne}>
+                    {item.employeeName} • {warningType}
                   </Text>
-                  <Text style={styles.td}>{item.date}</Text>
-                  <SeverityPill severity={item.severity} />
+                  <Pressable style={({ pressed }) => [styles.warningAction, pressed && { opacity: 0.85 }]}>
+                    <Text style={styles.warningActionText}>Action</Text>
+                  </Pressable>
                 </View>
-              )}
-              ItemSeparatorComponent={() => <View style={styles.sep} />}
-            />
-          </View>
-        </ScrollView>
+
+                <Text style={styles.warningLineTwo}>
+                  {item.reason} • {item.createdBy || 'HR Admin'}
+                </Text>
+
+                <Text style={styles.warningDate}>Created at: {item.date || '-'}</Text>
+              </View>
+            );
+          }}
+          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+          ListEmptyComponent={
+            <Text style={styles.emptyText}>No warnings found.</Text>
+          }
+        />
       </Card>
 
       <Modal
@@ -185,35 +256,27 @@ export default function PerformanceWarningScreen() {
   );
 }
 
-function SeverityPill({ severity }) {
-  const isHigh = severity === 'High';
-  const isLow = severity === 'Low';
-
-  return (
-    <View
-      style={[
-        styles.sevPill,
-        isHigh && styles.sevHigh,
-        isLow && styles.sevLow,
-      ]}
-    >
-      <Text
-        style={[
-          styles.sevText,
-          isHigh && styles.sevTextHigh,
-          isLow && styles.sevTextLow,
-        ]}
-      >
-        {severity}
-      </Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   title: { fontSize: 18, fontWeight: '900', color: '#0f172a' },
   subtitle: { marginTop: 4, color: '#64748b', fontWeight: '600' },
   sectionTitle: { fontSize: 14, fontWeight: '900', color: '#0f172a' },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  topActionBtn: {
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  topActionBtnText: {
+    color: '#fff',
+    fontWeight: '900',
+    fontSize: 12,
+  },
   label: {
     marginTop: 10,
     marginBottom: 6,
@@ -233,7 +296,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   selectorText: { color: '#0f172a', fontWeight: '800' },
-  chevron: { color: '#64748b', fontSize: 16, fontWeight: '900' },
+  chevron: { color: '#64748b', fontSize: 14, fontWeight: '900' },
   input: {
     borderWidth: 1,
     borderColor: '#d1d5db',
@@ -244,9 +307,26 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0f172a',
   },
+  addTypeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  typeInput: { flex: 1 },
+  addTypeBtn: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  addTypeBtnText: {
+    color: '#0f172a',
+    fontWeight: '900',
+    fontSize: 12,
+  },
   grid: { flexDirection: 'row', gap: 12 },
   col: { flex: 1 },
-  pillsRow: { flexDirection: 'row', gap: 8 },
+  pillsRowWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   pill: {
     borderWidth: 1,
     borderColor: '#d1d5db',
@@ -258,38 +338,59 @@ const styles = StyleSheet.create({
   pillActive: { backgroundColor: '#e11d48', borderColor: '#e11d48' },
   pillText: { color: '#0f172a', fontWeight: '900', fontSize: 12 },
   pillTextActive: { color: '#fff' },
-  tableHeader: {
-    flexDirection: 'row',
+  warningListContent: {
     paddingTop: 10,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    paddingBottom: 4,
   },
-  th: { flex: 1, fontWeight: '900', color: '#0f172a', fontSize: 12 },
-  row: { flexDirection: 'row', paddingVertical: 12, alignItems: 'center' },
-  td: { flex: 1, color: '#334155', fontWeight: '700', fontSize: 12 },
-  sep: { height: 1, backgroundColor: '#f1f5f9' },
-  tableScrollContent: {
-    flexGrow: 1,
+  warningCard: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    padding: 12,
+    gap: 8,
   },
-  tableContainer: {
-    minWidth: 720,
+  warningCardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 8,
   },
-  sevPill: {
+  warningLineOne: {
     flex: 1,
-    alignSelf: 'flex-start',
+    color: '#0f172a',
+    fontWeight: '900',
+    fontSize: 13,
+  },
+  warningLineTwo: {
+    color: '#334155',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  warningDate: {
+    color: '#64748b',
+    fontWeight: '700',
+    fontSize: 11,
+  },
+  warningAction: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    backgroundColor: '#ffedd5',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  sevText: { fontSize: 11, fontWeight: '900', color: '#c2410c' },
-  sevHigh: { backgroundColor: '#fee2e2' },
-  sevTextHigh: { color: '#b91c1c' },
-  sevLow: { backgroundColor: '#dcfce7' },
-  sevTextLow: { color: '#15803d' },
+  warningActionText: {
+    color: '#0f172a',
+    fontWeight: '900',
+    fontSize: 11,
+  },
+  emptyText: {
+    marginTop: 10,
+    color: '#64748b',
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.55)',
