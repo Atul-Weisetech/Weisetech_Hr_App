@@ -75,19 +75,48 @@ function normalizeWfh(row) {
   };
 }
 function normalizeWarning(row) {
+  let warningTypes = [];
+  if (Array.isArray(row.warning_types)) {
+    warningTypes = row.warning_types;
+  } else if (typeof row.warning_types === 'string') {
+    try {
+      const parsed = JSON.parse(row.warning_types);
+      warningTypes = Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      warningTypes = [];
+    }
+  }
+
+  const warningTypeText = warningTypes
+    .map(t => (typeof t === 'string' ? t : t?.warning_type || t?.warningType || t?.type || ''))
+    .filter(Boolean)
+    .join(', ');
+
   return {
     id: String(row.id),
     employeeId: String(row.employee_id),
     employeeName: row.employee_name,
-    reason: row.overall_notes || (row.warning_types || []).join(', ') || 'Performance warning',
+    reason: row.overall_notes || warningTypeText || 'Performance warning',
     date: row.created_at ? String(row.created_at).slice(0, 10) : '',
-    severity: mapSeverityFromTypes(row.warning_types),
-    warningTypes: row.warning_types || [],
+    severity: mapSeverityFromTypes(warningTypes),
+    warningTypes,
     createdBy: row.created_by || 'HR Admin',
   };
 }
 function normalizePayroll(row, employeeNameMap = {}) {
   const employeeId = String(row.fk_employee_id);
+  const allowance =
+    row.allowance ??
+    row.allowances ??
+    row.other_earnings ??
+    row.other_allowance ??
+    0;
+  const deduction =
+    row.deduction ??
+    row.deductions ??
+    row.total_deduction ??
+    row.other_deduction ??
+    0;
   return {
     id: String(row.id),
     employeeId,
@@ -99,8 +128,8 @@ function normalizePayroll(row, employeeNameMap = {}) {
     payrollDate: row.payroll_date,
     paymentMode: row.mode_of_payment || 'N/A',
     basic: Number(row.payroll_amount || 0),
-    allowance: 0,
-    deduction: 0,
+    allowance: Number(allowance || 0),
+    deduction: Number(deduction || 0),
     isPublished: !!row.is_published,
   };
 }
@@ -111,6 +140,7 @@ function normalizeNotification(row) {
     title: row.title,
     message: row.message,
     type: row.type || 'info',
+    referenceId: row.reference_id != null ? String(row.reference_id) : null,
     read: !!row.is_read,
     date: row.created_at ? String(row.created_at).slice(0, 10) : '',
   };
@@ -126,6 +156,7 @@ export function AppStoreProvider({ children }) {
   const [warnings, setWarnings] = useState([]);
   const [notificationsByEmployee, setNotificationsByEmployee] = useState({});
   const [holidays, setHolidays] = useState([]);
+  const [timeEntries, setTimeEntries] = useState([]);
 
   // ── Loaders ────────────────────────────────────────────────────────────────
   const loadEmployees = useCallback(async () => {
@@ -185,22 +216,49 @@ export function AppStoreProvider({ children }) {
     return normalized;
   }, []);
 
+  const loadTimeEntries = useCallback(async employeeIdParam => {
+    const employeeId = String(employeeIdParam || user?.employeeId || user?.id || '');
+    if (!employeeId) {
+      setTimeEntries([]);
+      return;
+    }
+    try {
+      const now = new Date();
+      const month = now.getMonth() + 1;
+      const year = now.getFullYear();
+      const { data } = await hrApi.get(`/attendance/records/${employeeId}?month=${month}&year=${year}`);
+      const rows = Array.isArray(data?.records) ? data.records : [];
+      const normalized = rows.map((row, idx) => ({
+        id: `${employeeId}-${row.date}-${idx}`,
+        employeeId,
+        date: row.date,
+        startTime: row.clock_in || '',
+        endTime: row.clock_out || '',
+        durationMinutes: Math.max(0, Math.round(Number(row.hours || 0) * 60)),
+      }));
+      setTimeEntries(normalized);
+    } catch (e) {
+      setTimeEntries([]);
+    }
+  }, [user?.employeeId, user?.id]);
+
   const refreshAllData = useCallback(async () => {
     try {
       const employeeList = await loadEmployees();
+      const empId = user?.employeeId || user?.id;
       await Promise.allSettled([
         loadPayrolls(employeeList),
         loadLeaveRequests(),
         loadWfhRequests(),
         loadWarnings(),
         loadHolidays(),
+        loadTimeEntries(empId),
       ]);
-      const empId = user?.employeeId || user?.id;
       if (empId) await loadNotifications(String(empId));
     } catch (e) {
       console.log('App data refresh failed', e?.message);
     }
-  }, [loadEmployees, loadPayrolls, loadLeaveRequests, loadWfhRequests, loadWarnings, loadHolidays, loadNotifications, user?.employeeId, user?.id]);
+  }, [loadEmployees, loadPayrolls, loadLeaveRequests, loadWfhRequests, loadWarnings, loadHolidays, loadNotifications, loadTimeEntries, user?.employeeId, user?.id]);
 
   useEffect(() => { refreshAllData(); }, [refreshAllData]);
 
@@ -209,6 +267,8 @@ export function AppStoreProvider({ children }) {
     const body = {
       fk_employee_id: Number(payload.employeeId),
       payroll_amount: Number(payload.basic || 0) + Number(payload.allowance || 0) - Number(payload.deduction || 0),
+      allowance: Number(payload.allowance || 0),
+      deduction: Number(payload.deduction || 0),
       payroll_date: payload.payrollDate || new Date().toISOString().slice(0, 10),
       pay_month: payload.month,
       mode_of_payment: payload.paymentMode || 'NEFT',
@@ -288,6 +348,28 @@ export function AppStoreProvider({ children }) {
     await loadHolidays();
   }, [loadHolidays]);
 
+  const startAttendanceSession = useCallback(async employeeId => {
+    const { data } = await hrApi.post('/attendance/clock-in', {
+      empl_id: Number(employeeId),
+      lat: 0,
+      log: 0,
+    });
+    if (!data?.success) throw new Error(data?.message || 'Unable to start tracking');
+    await loadTimeEntries(employeeId);
+    return data;
+  }, [loadTimeEntries]);
+
+  const endAttendanceSession = useCallback(async employeeId => {
+    const { data } = await hrApi.post('/attendance/clock-out', {
+      empl_id: Number(employeeId),
+      lat: 0,
+      log: 0,
+    });
+    if (!data?.success) throw new Error(data?.message || 'Unable to end tracking');
+    await loadTimeEntries(employeeId);
+    return data;
+  }, [loadTimeEntries]);
+
   // ── DATA context value — changes when data changes ─────────────────────────
   const dataValue = useMemo(() => ({
     employees,
@@ -297,7 +379,8 @@ export function AppStoreProvider({ children }) {
     warnings,
     notificationsByEmployee,
     holidays,
-  }), [employees, payrolls, leaveRequests, wfhRequests, warnings, notificationsByEmployee, holidays]);
+    timeEntries,
+  }), [employees, payrolls, leaveRequests, wfhRequests, warnings, notificationsByEmployee, holidays, timeEntries]);
 
   // ── ACTIONS context value — stable, changes only when loaders change ────────
   const actionsValue = useMemo(() => ({
@@ -317,10 +400,13 @@ export function AppStoreProvider({ children }) {
     refreshWarnings: loadWarnings,
     refreshNotifications: loadNotifications,
     refreshHolidays: loadHolidays,
+    startAttendanceSession,
+    endAttendanceSession,
+    refreshTimeEntries: loadTimeEntries,
     refreshAllData,
   }), [addPayroll, updateLeaveStatus, updateWfhStatus, addWarning, addLeaveRequest, addWfhRequest,
       markNotificationRead, addHoliday, deleteHoliday, loadEmployees, loadPayrolls,
-      loadLeaveRequests, loadWfhRequests, loadWarnings, loadNotifications, loadHolidays, refreshAllData]);
+      loadLeaveRequests, loadWfhRequests, loadWarnings, loadNotifications, loadHolidays, startAttendanceSession, endAttendanceSession, loadTimeEntries, refreshAllData]);
 
   return (
     <AppStoreContext.Provider value={dataValue}>

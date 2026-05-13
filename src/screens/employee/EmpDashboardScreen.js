@@ -1,4 +1,4 @@
-﻿import React, { useContext, useMemo } from 'react';
+﻿import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,21 @@ import {
   TouchableOpacity,
   Alert,
   Dimensions,
+  Modal,
+  TextInput,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AuthContext } from '../../state/AuthContext';
-import { AppStoreContext } from '../../state/AppStore';
+import { AppStoreActionsContext, AppStoreContext } from '../../state/AppStore';
+import hrApi from '../../api/hrApi';
+
+let persistedTrackerDraft = {
+  activityType: 'Working',
+  startTime: '',
+  endTime: '',
+  activity: '',
+  description: '',
+};
 
 function calculateDaysInclusive(fromDate, toDate) {
   const start = new Date(fromDate);
@@ -54,11 +65,55 @@ function getSimpleCalendar() {
   };
 }
 
-export default function EmpDashboardScreen() {
+export default function EmpDashboardScreen({ onNavigateTab }) {
   const { user, signOut } = useContext(AuthContext);
-  const { leaveRequests, wfhRequests, payrolls } = useContext(AppStoreContext);
+  const { leaveRequests, wfhRequests, payrolls, timeEntries, holidays } = useContext(AppStoreContext);
+  const { startAttendanceSession, endAttendanceSession, refreshTimeEntries } = useContext(AppStoreActionsContext);
+  const [trackerVisible, setTrackerVisible] = useState(false);
+  const [trackerForm, setTrackerForm] = useState(persistedTrackerDraft);
+  const [isTrackingStarted, setIsTrackingStarted] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const trackingStartRef = useRef(null); // exact Date when tracking started
+  const intervalRef = useRef(null);      // setInterval id
+
+  // Clean up interval on unmount
+  useEffect(() => () => clearInterval(intervalRef.current), []);
 
   const myEmployeeId = String(user.employeeId || user.id);
+  useEffect(() => {
+    persistedTrackerDraft = trackerForm;
+  }, [trackerForm]);
+
+  useEffect(() => {
+    refreshTimeEntries(myEmployeeId);
+  }, [refreshTimeEntries, myEmployeeId]);
+
+  useEffect(() => {
+    let mounted = true;
+    const syncStatus = async () => {
+      try {
+        const { data } = await hrApi.get(`/attendance/status/${myEmployeeId}`);
+        if (!mounted || !data?.success || !data?.running || !data?.clock_in_time) return;
+
+        const clockIn = new Date(Number(data.clock_in_time) * 1000);
+        const startText = `${String(clockIn.getHours()).padStart(2, '0')}:${String(clockIn.getMinutes()).padStart(2, '0')}`;
+        trackingStartRef.current = clockIn;
+        setIsTrackingStarted(true);
+        setElapsedSeconds(Math.max(0, Math.floor((Date.now() - clockIn.getTime()) / 1000)));
+        setTrackerForm(prev => ({ ...prev, startTime: prev.startTime || startText }));
+
+        clearInterval(intervalRef.current);
+        intervalRef.current = setInterval(() => {
+          if (!trackingStartRef.current) return;
+          setElapsedSeconds(Math.floor((Date.now() - trackingStartRef.current.getTime()) / 1000));
+        }, 1000);
+      } catch (e) {
+        // no-op
+      }
+    };
+    syncStatus();
+    return () => { mounted = false; };
+  }, [myEmployeeId]);
 
   const {
     approvedLeaveDays,
@@ -119,12 +174,102 @@ export default function EmpDashboardScreen() {
       leaveBalance: balance,      recentPayrolls: recent,      thisMonthCompleted: completedDays,
       leaveUsagePct: leavePct,
       calendar: getSimpleCalendar(),
-      monthWfhApproved,
     };
   }, [leaveRequests, wfhRequests, payrolls, myEmployeeId]);
 
+  const { holidayDays, leaveDays, wfhDays } = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    const monthPrefix = `${currentYear}-${String(currentMonth).padStart(2, '0')}-`;
+
+    const toKey = dateObj => `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+
+    const holidaySet = new Set(
+      holidays
+        .map(h => String(h.date || '').slice(0, 10))
+        .filter(day => day.startsWith(monthPrefix)),
+    );
+
+    const leaveSet = new Set();
+    leaveRequests
+      .filter(r => String(r.employeeId) === myEmployeeId && r.status === 'Approved')
+      .forEach(r => {
+        let d = new Date(r.from);
+        const end = new Date(r.to);
+        if (Number.isNaN(d.getTime()) || Number.isNaN(end.getTime())) return;
+        while (d <= end) {
+          if ((d.getMonth() + 1) === currentMonth && d.getFullYear() === currentYear) leaveSet.add(toKey(d));
+          d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+        }
+      });
+
+    const wfhSet = new Set();
+    wfhRequests
+      .filter(r => String(r.employeeId) === myEmployeeId && r.status === 'Approved')
+      .forEach(r => {
+        let d = new Date(r.from);
+        const end = new Date(r.to);
+        if (Number.isNaN(d.getTime()) || Number.isNaN(end.getTime())) return;
+        while (d <= end) {
+          if ((d.getMonth() + 1) === currentMonth && d.getFullYear() === currentYear) wfhSet.add(toKey(d));
+          d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+        }
+      });
+
+    return { holidayDays: holidaySet, leaveDays: leaveSet, wfhDays: wfhSet };
+  }, [holidays, leaveRequests, wfhRequests, myEmployeeId]);
+
   const greeting = useMemo(getGreetingByHour, []);
   const isSmallScreen = Dimensions.get('window').width < 420;
+  const todayDate = new Date().toISOString().slice(0, 10);
+  const myTodayEntries = timeEntries.filter(
+    entry => String(entry.employeeId) === myEmployeeId && entry.date === todayDate,
+  );
+  const todayWorkedMinutes = myTodayEntries.reduce(
+    (sum, entry) => sum + Number(entry.durationMinutes || 0),
+    0,
+  );
+  const todayTotalHoursText = `${String(Math.floor(todayWorkedMinutes / 60)).padStart(2, '0')}:${String(todayWorkedMinutes % 60).padStart(2, '0')}`;
+  const sessionHoursText = isTrackingStarted
+    ? `${String(Math.floor(elapsedSeconds / 3600)).padStart(2, '0')}:${String(Math.floor((elapsedSeconds % 3600) / 60)).padStart(2, '0')}:${String(elapsedSeconds % 60).padStart(2, '0')}`
+    : '00:00';
+
+  const saveTrackerEntry = async () => {
+    const now = new Date();
+    const nowText = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    if (!isTrackingStarted) {
+      try {
+        await startAttendanceSession(myEmployeeId);
+        trackingStartRef.current = new Date();
+        intervalRef.current = setInterval(() => {
+          if (!trackingStartRef.current) return;
+          setElapsedSeconds(Math.floor((Date.now() - trackingStartRef.current.getTime()) / 1000));
+        }, 1000);
+        setTrackerForm(prev => ({ ...prev, startTime: nowText, endTime: '' }));
+        setIsTrackingStarted(true);
+        Alert.alert('Tracking Started', `Timer running from ${nowText}`);
+      } catch (e) {
+        Alert.alert('Could not start', e?.message || 'Please try again.');
+      }
+      return;
+    }
+
+    try {
+      const result = await endAttendanceSession(myEmployeeId);
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+      trackingStartRef.current = null;
+      setElapsedSeconds(0);
+      setIsTrackingStarted(false);
+      setTrackerForm(prev => ({ ...prev, endTime: nowText }));
+      setTrackerVisible(false);
+      Alert.alert('Saved', `Done for today. Working hours: ${result?.working_hours ?? 0}`);
+    } catch (e) {
+      Alert.alert('Could not end', e?.message || 'Please try again.');
+    }
+  };
 
   return (
     <ScrollView
@@ -139,7 +284,7 @@ export default function EmpDashboardScreen() {
   </Text>
 
   <Text style={styles.subGreeting}>
-    Hope you have a productive day ahead
+    Hope you have a productive day ahead ✨
   </Text>
 
       <TouchableOpacity
@@ -156,17 +301,17 @@ export default function EmpDashboardScreen() {
 </View>
 
         <View style={styles.headerActions}>
-          <TouchableOpacity style={[styles.actionBtn, styles.actionMuted]}>
+          <TouchableOpacity style={[styles.actionBtn, styles.actionMuted]} onPress={() => onNavigateTab?.('leave')}>
             <MaterialCommunityIcons name="calendar-plus" size={15} color="#be123c" />
             <Text style={[styles.actionText, { color: '#be123c' }]}>Apply Leave</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.actionBtn, styles.actionCool]}>
+          <TouchableOpacity style={[styles.actionBtn, styles.actionCool]} onPress={() => onNavigateTab?.('wfh')}>
             <MaterialCommunityIcons name="home-city" size={15} color="#0369a1" />
             <Text style={[styles.actionText, { color: '#0369a1' }]}>Request WFH</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.actionBtn, styles.actionPrimary]}>
+          <TouchableOpacity style={[styles.actionBtn, styles.actionPrimary]} onPress={() => setTrackerVisible(true)}>
             <MaterialCommunityIcons name="clock-time-four" size={15} color="#ffffff" />
             <Text style={[styles.actionText, { color: '#ffffff' }]}>Open Time Tracker</Text>
           </TouchableOpacity>
@@ -228,7 +373,9 @@ export default function EmpDashboardScreen() {
           </View>
           <Text style={[styles.metricValue, { color: '#7c3aed' }]}>{recentPayrolls.length}</Text>
           <Text style={styles.metricSub}>available payslips</Text>
-          <Text style={styles.metricLink}>View all</Text>
+          <TouchableOpacity onPress={() => onNavigateTab?.('payroll')}>
+            <Text style={styles.metricLink}>View all</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.metricCard}>
@@ -292,12 +439,23 @@ export default function EmpDashboardScreen() {
           <View style={styles.calendarGrid}>
             {calendar.cells.map((day, idx) => {
               const isToday = day === calendar.today;
+              const now = new Date();
+              const key = day
+                ? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                : '';
+              const isHoliday = day ? holidayDays.has(key) : false;
+              const isLeave = day ? leaveDays.has(key) : false;
+              const isWfh = day ? wfhDays.has(key) : false;
+              const dotColor = isHoliday ? '#f87171' : isLeave ? '#22c55e' : isWfh ? '#06b6d4' : null;
               return (
                 <View key={`${day || 'x'}-${idx}`} style={styles.dayCellWrap}>
                   {day ? (
-                    <View style={isToday ? styles.todayDot : undefined}>
-                      <Text style={[styles.dayCellText, isSmallScreen && styles.dayCellTextMobile, isToday && styles.todayText]}>{day}</Text>
-                    </View>
+                    <>
+                      <View style={isToday ? styles.todayDot : undefined}>
+                        <Text style={[styles.dayCellText, isSmallScreen && styles.dayCellTextMobile, isToday && styles.todayText]}>{day}</Text>
+                      </View>
+                      {dotColor ? <View style={[styles.dayEventDot, { backgroundColor: dotColor }]} /> : null}
+                    </>
                   ) : (
                     <Text style={[styles.dayCellText, isSmallScreen && styles.dayCellTextMobile]}>{' '}</Text>
                   )}
@@ -312,20 +470,32 @@ export default function EmpDashboardScreen() {
             <Text style={[styles.legendEntry, { color: '#22c55e' }]}>o Leave</Text>
             <Text style={[styles.legendEntry, { color: '#06b6d4' }]}>o WFH</Text>
           </View>
-          <Text style={styles.noEvents}>No events this month</Text>
+          <Text style={styles.noEvents}>
+            Holidays: {holidayDays.size} | Leave: {leaveDays.size} | WFH: {wfhDays.size}
+          </Text>
         </View>
 
         <View style={[styles.panelCard, isSmallScreen && styles.panelCardMobile]}>
           <Text style={[styles.panelTitle, isSmallScreen && styles.panelTitleMobile]}>TODAY'S WORKING HOURS</Text>
           <View style={styles.timerWrap}>
-            <View style={[styles.timerCircle, isSmallScreen && styles.timerCircleMobile]}>
+            <View
+              style={[
+                styles.timerCircle,
+                isSmallScreen && styles.timerCircleMobile,
+                isTrackingStarted && styles.timerCircleRunning,
+              ]}
+            >
               <MaterialCommunityIcons name="clock-time-five" size={22} color="#9ca3af" />
-              <Text style={[styles.timerValue, isSmallScreen && styles.timerValueMobile]}>00:00</Text>
+              <Text style={[styles.timerValue, isSmallScreen && styles.timerValueMobile]}>{sessionHoursText}</Text>
             </View>
-            <Text style={[styles.timerNote, isSmallScreen && styles.timerNoteMobile]}>No active session</Text>
-            <TouchableOpacity style={[styles.startTrackBtn, isSmallScreen && styles.startTrackBtnMobile]}>
-              <MaterialCommunityIcons name="clock-start" size={14} color="#ffffff" />
-              <Text style={[styles.startTrackText, isSmallScreen && styles.startTrackTextMobile]}>Start Tracking</Text>
+            <Text style={[styles.timerNote, isSmallScreen && styles.timerNoteMobile]}>
+              {isTrackingStarted ? 'Tracking in progress' : `Today total: ${todayTotalHoursText}`}
+            </Text>
+            <TouchableOpacity
+              style={[styles.startTrackBtn, isSmallScreen && styles.startTrackBtnMobile]}
+              onPress={() => setTrackerVisible(true)}
+            >
+                <Text style={[styles.startTrackText, isSmallScreen && styles.startTrackTextMobile]}>Start Tracking</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -334,7 +504,9 @@ export default function EmpDashboardScreen() {
       <View style={styles.recentSection}>
         <View style={styles.recentHeader}>
           <Text style={styles.recentTitle}>RECENT PAYSLIPS</Text>
-          <Text style={styles.viewAll}>View All</Text>
+          <TouchableOpacity onPress={() => onNavigateTab?.('payroll')}>
+            <Text style={styles.viewAll}>View All</Text>
+          </TouchableOpacity>
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.payslipRow}>
@@ -372,7 +544,81 @@ export default function EmpDashboardScreen() {
             })
           )}
         </ScrollView>
-      </View>    
+      </View>
+
+      <Modal visible={trackerVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Time Tracker</Text>
+            <Text style={styles.modalSub}>Date: {todayDate}</Text>
+
+            <Text style={styles.modalLabel}>Activity Type</Text>
+            <View style={styles.typeRow}>
+              {['Working', 'Meeting', 'Project', 'Break'].map(type => (
+                <TouchableOpacity
+                  key={type}
+                  style={[styles.typeChip, trackerForm.activityType === type && styles.typeChipActive]}
+                  onPress={() => setTrackerForm(prev => ({ ...prev, activityType: type }))}
+                >
+                  <Text style={[styles.typeChipText, trackerForm.activityType === type && styles.typeChipTextActive]}>
+                    {type}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.modalLabel}>Start Time (HH:MM)</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="09:30"
+              placeholderTextColor="#94a3b8"
+              value={trackerForm.startTime}
+              onChangeText={value => setTrackerForm(prev => ({ ...prev, startTime: value }))}
+              editable={!isTrackingStarted}
+            />
+
+            <Text style={styles.modalLabel}>End Time (HH:MM)</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="18:15"
+              placeholderTextColor="#94a3b8"
+              value={trackerForm.endTime}
+              onChangeText={value => setTrackerForm(prev => ({ ...prev, endTime: value }))}
+            />
+
+            <Text style={styles.modalLabel}>Activity (optional)</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="What are you working on?"
+              placeholderTextColor="#94a3b8"
+              value={trackerForm.activity}
+              onChangeText={value => setTrackerForm(prev => ({ ...prev, activity: value }))}
+            />
+
+            <Text style={styles.modalLabel}>Description (optional)</Text>
+            <TextInput
+              style={[styles.modalInput, styles.modalInputArea]}
+              placeholder="Add details..."
+              placeholderTextColor="#94a3b8"
+              multiline
+              numberOfLines={3}
+              value={trackerForm.description}
+              onChangeText={value => setTrackerForm(prev => ({ ...prev, description: value }))}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setTrackerVisible(false)}>
+                <Text style={styles.modalCancelText}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSave} onPress={saveTrackerEntry}>
+                <Text style={styles.modalSaveText}>
+                  {isTrackingStarted ? 'Done for Today' : 'Start Tracking'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -524,6 +770,12 @@ const styles = StyleSheet.create({
   dayCellWrap: { width: '14%', alignItems: 'center', marginVertical: 5 },
   dayCellText: { fontSize: 18, color: '#334155', width: 32, textAlign: 'center', lineHeight: 32 },
   dayCellTextMobile: { fontSize: 15, width: 28, lineHeight: 28 },
+  dayEventDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 2,
+  },
   todayDot: {
     width: 32,
     height: 32,
@@ -550,6 +802,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   timerCircleMobile: { width: 112, height: 112, borderRadius: 56, borderWidth: 6, marginBottom: 10 },
+  timerCircleRunning: { borderColor: '#16a34a' },
   timerValue: { fontSize: 34, fontWeight: '800', color: '#0f172a', marginTop: 4 },
   timerValueMobile: { fontSize: 28 },
   timerNote: { fontSize: 18, color: '#94a3b8', marginBottom: 12, textAlign: 'center' },
@@ -622,6 +875,66 @@ const styles = StyleSheet.create({
   },
   emptyPayrollText: { color: '#64748b', fontWeight: '600' },
 
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    padding: 18,
+    paddingBottom: 26,
+    maxHeight: '88%',
+  },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a' },
+  modalSub: { marginTop: 4, color: '#64748b', fontSize: 13 },
+  modalLabel: { marginTop: 12, marginBottom: 6, color: '#374151', fontWeight: '700', fontSize: 13 },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 12,
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#0f172a',
+    fontSize: 14,
+  },
+  modalInputArea: { height: 80, textAlignVertical: 'top' },
+  typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  typeChip: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 18,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#ffffff',
+  },
+  typeChipActive: { backgroundColor: '#d40950', borderColor: '#d40950' },
+  typeChipText: { color: '#334155', fontWeight: '700', fontSize: 12 },
+  typeChipTextActive: { color: '#ffffff' },
+  modalActions: { marginTop: 16, flexDirection: 'row', gap: 10 },
+  modalCancel: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 42,
+  },
+  modalCancelText: { color: '#475569', fontWeight: '700' },
+  modalSave: {
+    flex: 1,
+    backgroundColor: '#d40950',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 42,
+  },
+  modalSaveText: { color: '#ffffff', fontWeight: '700' },
+
   logoutBottomBtn: {
     marginTop: 16,
     alignSelf: 'flex-end',
@@ -634,5 +947,3 @@ const styles = StyleSheet.create({
   },
   logoutBottomText: { color: '#dc2626', fontWeight: '700' },
 });
-
-

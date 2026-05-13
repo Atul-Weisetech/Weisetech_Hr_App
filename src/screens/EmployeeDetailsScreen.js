@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -13,6 +13,7 @@ import {
 import Screen from '../components/Screen';
 import Card from '../components/Card';
 import hrApi from '../api/hrApi';
+import { AuthContext } from '../state/AuthContext';
 
 
 function formatCurrency(value) {
@@ -68,7 +69,11 @@ function parseMoney(input) {
   return Number(String(input || '').replace(/[^\d.-]/g, '')) || 0;
 }
 
+
 export default function EmployeeDetailsScreen() {
+  const { user } = useContext(AuthContext);
+  const canAddHrAccount = user?.role === 'admin' || user?.userRole === 0;
+
   const [employees, setEmployees] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -89,6 +94,7 @@ export default function EmployeeDetailsScreen() {
     joiningDate: '',
     status: 'Active',
   });
+  const [addUserType, setAddUserType] = useState('employee');
 
   const selectedEmployee = useMemo(
     () => employees.find(e => e.id === selectedId) || null,
@@ -97,12 +103,15 @@ export default function EmployeeDetailsScreen() {
 
   const onChangeField = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
 
-  const resetForm = () =>
+  const resetForm = () => {
     setForm({ name: '', role: '', email: '', salary: '', deductions: '', joiningDate: '', status: 'Active' });
+    setAddUserType('employee');
+  };
 
   const loadEmployees = () => {
+    const includeHR = canAddHrAccount ? '?includeHR=true' : '';
     hrApi
-      .get('/employees')
+      .get(`/employees${includeHR}`)
       .then(({ data }) => {
         const rows = Array.isArray(data) ? data : [];
         setEmployees(rows.map(normalizeEmployee));
@@ -112,7 +121,7 @@ export default function EmployeeDetailsScreen() {
       });
   };
 
-  useEffect(() => { loadEmployees(); }, []);
+  useEffect(() => { loadEmployees(); }, [canAddHrAccount]);
 
   const onAddEmployee = async () => {
     const trimmedName = form.name.trim();
@@ -123,24 +132,48 @@ export default function EmployeeDetailsScreen() {
     }
     const [firstName, ...rest] = trimmedName.split(' ');
     const lastName = rest.join(' ');
+
+    // Send both email + email_address so both local and hosted backends validate correctly.
+    // Local backend strips `email` and `password` before INSERT (safe).
+    // Hosted backend validates `email` + `password` before creating the account.
     const primaryPayload = {
       first_name: firstName,
       last_name: lastName || '',
       email_address: trimmedEmail,
+      email: trimmedEmail,
       designation: form.role.trim() || 'Employee',
       salary: Number(form.salary || 0),
       deduction: Number(form.deductions || 0),
       joining_date: form.joiningDate.trim() || null,
     };
+
+    // /add-hr uses named fields (not SET ?) and validates `email`
+    const hrPayload = {
+      firstname: firstName,
+      lastname: lastName || '',
+      email: trimmedEmail,
+      salary: Number(form.salary || 0),
+      deduction: Number(form.deductions || 0),
+      joiningDate: form.joiningDate.trim() || null,
+    };
+
     try {
-      await hrApi.post('/employees', primaryPayload);
+      if (canAddHrAccount && addUserType === 'hr') {
+        await hrApi.post('/add-hr', hrPayload);
+      } else {
+        await hrApi.post('/employees', primaryPayload);
+      }
       loadEmployees();
       resetForm();
       setAddOpen(false);
     } catch (error) {
+      const backendMessage =
+        error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        (error?.message ? String(error.message) : 'Please check input and try again.');
       Alert.alert(
         'Could not add employee',
-        error?.response?.data?.error || error?.response?.data?.message || 'Please check input and try again.',
+        `${backendMessage}\nAPI: ${hrApi.defaults.baseURL}`,
       );
     }
   };
@@ -367,6 +400,42 @@ export default function EmployeeDetailsScreen() {
         <Pressable style={styles.modalBackdrop} onPress={() => { setAddOpen(false); setEditOpen(false); }}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <Text style={styles.modalTitle}>{editOpen ? 'Edit Employee' : 'Add Employee'}</Text>
+            {!editOpen && canAddHrAccount ? (
+              <View style={styles.typeToggleRow}>
+                <Pressable
+                  style={[
+                    styles.typeToggleButton,
+                    addUserType === 'employee' && styles.typeToggleButtonActive,
+                  ]}
+                  onPress={() => setAddUserType('employee')}
+                >
+                  <Text
+                    style={[
+                      styles.typeToggleText,
+                      addUserType === 'employee' && styles.typeToggleTextActive,
+                    ]}
+                  >
+                    Employee
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.typeToggleButton,
+                    addUserType === 'hr' && styles.typeToggleButtonActive,
+                  ]}
+                  onPress={() => setAddUserType('hr')}
+                >
+                  <Text
+                    style={[
+                      styles.typeToggleText,
+                      addUserType === 'hr' && styles.typeToggleTextActive,
+                    ]}
+                  >
+                    HR
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
             <View style={{ gap: 8 }}>
               <TextInput style={styles.input} value={form.name} onChangeText={t => onChangeField('name', t)} placeholder="Employee name" />
               <TextInput style={styles.input} value={form.role} onChangeText={t => onChangeField('role', t)} placeholder="Role" />
@@ -509,6 +578,11 @@ const styles = StyleSheet.create({
   closeBtn: { marginTop: 14, backgroundColor: '#e11d48', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   closeBtnText: { color: '#fff', fontWeight: '900' },
   input: { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: '#111827', backgroundColor: '#ffffff' },
+  typeToggleRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  typeToggleButton: { flex: 1, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 10, paddingVertical: 8, alignItems: 'center' },
+  typeToggleButtonActive: { backgroundColor: '#fce7ef', borderColor: '#CC0D49' },
+  typeToggleText: { color: '#475569', fontWeight: '700' },
+  typeToggleTextActive: { color: '#CC0D49', fontWeight: '800' },
   addActionsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 14 },
   secondaryBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: '#d1d5db' },
   secondaryBtnText: { color: '#374151', fontWeight: '700' },

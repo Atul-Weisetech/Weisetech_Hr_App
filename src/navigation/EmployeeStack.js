@@ -29,7 +29,9 @@ export default function EmployeeStack() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.screenContainer}>{ActiveScreen && <ActiveScreen />}</View>
+      <View style={styles.screenContainer}>
+        {ActiveScreen && <ActiveScreen onNavigateTab={setActiveTab} />}
+      </View>
 
       <View style={styles.tabBar}>
         {TABS.map(tab => {

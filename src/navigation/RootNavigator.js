@@ -20,6 +20,7 @@ function SplashScreen() {
 
 export default function RootNavigator() {
   const { user, isRestoring } = useContext(AuthContext);
+  const canAccessAdminArea = user?.role === 'admin' || user?.role === 'hr';
 
   // While AsyncStorage is being read, show a neutral splash so the
   // login screen never flashes for already-authenticated users.
@@ -30,7 +31,7 @@ export default function RootNavigator() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!user ? (
           <Stack.Screen name="Login" component={LoginScreen} />
-        ) : user.role === 'admin' ? (
+        ) : canAccessAdminArea ? (
           <Stack.Screen name="App" component={AppDrawer} />
         ) : (
           <Stack.Screen name="Employee" component={EmployeeStack} />

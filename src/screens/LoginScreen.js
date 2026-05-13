@@ -12,7 +12,6 @@ import {
   Alert,
 } from 'react-native';
 import { AuthContext } from '../state/AuthContext';
-import { apiBaseURL } from '../api/hrApi';
 
 export default function LoginScreen() {
   const { signIn, isLoading } = useContext(AuthContext);
@@ -54,7 +53,6 @@ export default function LoginScreen() {
         </View>
         <View style={styles.card}>
           <Text style={styles.signInTitle}>Sign In</Text>
-          <Text style={styles.helperText}>API: {apiBaseURL}</Text>
 
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Email or Username</Text>
@@ -149,13 +147,6 @@ const styles = StyleSheet.create({
     color: '#1d4ed8',
     textAlign: 'center',
     marginBottom: 8,
-  },
-  helperText: {
-    textAlign: 'center',
-    color: '#64748b',
-    marginBottom: 16,
-    fontSize: 11,
-    fontWeight: '600',
   },
   fieldGroup: {
     marginBottom: 18,

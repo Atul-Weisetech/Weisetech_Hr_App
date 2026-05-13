@@ -6,6 +6,27 @@ const SESSION_KEY = '@hr_app_session';
 
 export const AuthContext = createContext(null);
 
+function normalizeRoleFromApi({ role, userRole }) {
+  const roleByUserRole = {
+    0: 'admin',
+    1: 'hr',
+    2: 'employee',
+  };
+
+  const parsedUserRole = Number(userRole);
+  if (Number.isInteger(parsedUserRole) && roleByUserRole[parsedUserRole]) {
+    return {
+      role: roleByUserRole[parsedUserRole],
+      userRole: parsedUserRole,
+    };
+  }
+
+  const roleText = String(role || '').toLowerCase();
+  if (roleText === 'admin') return { role: 'admin', userRole: 0 };
+  if (roleText === 'hr') return { role: 'hr', userRole: 1 };
+  return { role: 'employee', userRole: 2 };
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -33,7 +54,10 @@ export function AuthProvider({ children }) {
       const { data } = await hrApi.post('/login', { email, password });
       const apiUser = data?.user || {};
       const employee = data?.employee || null;
-      const role = data?.role || 'employee';
+      const { role, userRole } = normalizeRoleFromApi({
+        role: data?.role,
+        userRole: apiUser?.user_role,
+      });
 
       let resolvedEmployeeId = employee?.id || apiUser?.fk_employee_id || null;
       let resolvedName =
@@ -70,7 +94,9 @@ export function AuthProvider({ children }) {
         id: resolvedEmployeeId || apiUser?.id,
         name: resolvedName,
         email: apiUser?.email_address || email,
-        role: role === 'admin' || role === 'hr' ? 'admin' : 'employee',
+        role,
+        userRole,
+        isPrivileged: role === 'admin' || role === 'hr',
         employeeId: resolvedEmployeeId,
         designation: resolvedDesignation,
       };
