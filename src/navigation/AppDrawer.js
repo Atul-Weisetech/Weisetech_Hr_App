@@ -75,20 +75,34 @@ function CustomDrawerContent(props) {
 }
 
 export default function AppDrawer() {
+  const { user } = useContext(AuthContext);
+  const userName = String(user?.name || '').trim();
+
   return (
     <Drawer.Navigator
       initialRouteName="EmployeeDetails"
       drawerContent={props => <CustomDrawerContent {...props} />}
       screenOptions={({ navigation }) => ({
-        headerTitle: 'HR Portal',
-        drawerPosition: 'left',
+        headerTitle: () => (
+          <View>
+            <Text style={{ fontWeight: '700', fontSize: 18, color: '#0f172a' }}>
+              Welcome,
+            </Text>
+            {userName ? (
+              <Text style={{ fontSize: 12, color: '#0f172a', marginTop: 1 }}>
+                {userName}
+              </Text>
+            ) : null}
+          </View>
+        ),
+        drawerPosition: 'right',
         headerStyle: { backgroundColor: '#f8fafc' },
         headerTintColor: '#0f172a',
-        headerTitleStyle: { fontWeight: '700' },
+        headerTitleStyle: { fontWeight: '100' },
         drawerActiveTintColor: '#e11d48',
         drawerInactiveTintColor: '#0f172a',
-        drawerLabelStyle: { fontSize: 14 },
-        headerLeft: () => (
+        drawerLabelStyle: { fontSize: 15 },
+        headerRight: () => (
           <TouchableOpacity
             onPress={navigation.toggleDrawer}
             style={{

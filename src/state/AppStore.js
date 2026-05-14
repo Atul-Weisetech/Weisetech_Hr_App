@@ -275,9 +275,38 @@ export function AppStoreProvider({ children }) {
       is_published: 0,
     };
     const { data } = await hrApi.post('/payrolls', body);
-    await loadPayrolls();
+    await loadPayrolls(employees);
     return data;
-  }, [loadPayrolls]);
+  }, [loadPayrolls, employees]);
+
+  const updatePayroll = useCallback(async (id, payload) => {
+    const body = {
+      fk_employee_id: Number(payload.employeeId),
+      payroll_amount:
+        Number(payload.basic || 0) +
+        Number(payload.allowance || 0) -
+        Number(payload.deduction || 0),
+      payroll_date: payload.payrollDate,
+      pay_month: payload.month,
+      mode_of_payment: payload.paymentMode || 'NEFT',
+      is_published: payload.isPublished ? 1 : 0,
+    };
+    const { data } = await hrApi.put(`/payrolls/${id}`, body);
+    await loadPayrolls(employees);
+    return data;
+  }, [loadPayrolls, employees]);
+
+  const deletePayroll = useCallback(async id => {
+    const { data } = await hrApi.delete(`/payrolls/${id}`);
+    await loadPayrolls(employees);
+    return data;
+  }, [loadPayrolls, employees]);
+
+  const publishPayroll = useCallback(async id => {
+    const { data } = await hrApi.post(`/payrolls/publish/${id}`);
+    await loadPayrolls(employees);
+    return data;
+  }, [loadPayrolls, employees]);
 
   const updateLeaveStatus = useCallback(async (id, status) => {
     await hrApi.put(`/leave-requests/${id}/status`, { status: mapRequestStatusToApi(status), reviewed_by: 'HR Admin' });
@@ -385,6 +414,9 @@ export function AppStoreProvider({ children }) {
   // ── ACTIONS context value — stable, changes only when loaders change ────────
   const actionsValue = useMemo(() => ({
     addPayroll,
+    updatePayroll,
+    deletePayroll,
+    publishPayroll,
     updateLeaveStatus,
     updateWfhStatus,
     addWarning,
@@ -404,7 +436,7 @@ export function AppStoreProvider({ children }) {
     endAttendanceSession,
     refreshTimeEntries: loadTimeEntries,
     refreshAllData,
-  }), [addPayroll, updateLeaveStatus, updateWfhStatus, addWarning, addLeaveRequest, addWfhRequest,
+  }), [addPayroll, updatePayroll, deletePayroll, publishPayroll, updateLeaveStatus, updateWfhStatus, addWarning, addLeaveRequest, addWfhRequest,
       markNotificationRead, addHoliday, deleteHoliday, loadEmployees, loadPayrolls,
       loadLeaveRequests, loadWfhRequests, loadWarnings, loadNotifications, loadHolidays, startAttendanceSession, endAttendanceSession, loadTimeEntries, refreshAllData]);
 

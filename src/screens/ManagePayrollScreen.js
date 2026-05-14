@@ -1,5 +1,6 @@
-import React, { useContext, useEffect, useMemo, useState } from 'react';
+import React, { useContext, useMemo, useState } from 'react';
 import {
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -11,9 +12,14 @@ import {
 } from 'react-native';
 import Screen from '../components/Screen';
 import Card from '../components/Card';
-import { AppStoreContext } from '../state/AppStore';
+import { AppStoreActionsContext, AppStoreContext } from '../state/AppStore';
+import hrApi from '../api/hrApi';
 
 const THEME = '#CC0D49';
+const BREAKDOWN_CATEGORIES = [
+  { label: 'Earning', value: 1 },
+  { label: 'Deduction', value: 2 },
+];
 
 const MONTH_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -53,8 +59,24 @@ function formatDate(dateStr) {
   return String(dateStr).slice(0, 10);
 }
 
-export default function ManagePayrollScreen({ navigation }) {
+function getMonthKey(monthStr, payrollDate) {
+  const parsed = parseMonth(monthStr);
+  if (parsed?.year && parsed?.month) {
+    return `${parsed.year}-${String(parsed.month).padStart(2, '0')}`;
+  }
+  if (payrollDate && String(payrollDate).length >= 7) {
+    return String(payrollDate).slice(0, 7);
+  }
+  return '';
+}
+
+function categoryLabel(category) {
+  return Number(category) === 2 ? 'Deduction' : 'Earning';
+}
+
+export default function ManagePayrollScreen() {
   const { payrolls } = useContext(AppStoreContext);
+  const { updatePayroll, deletePayroll, publishPayroll } = useContext(AppStoreActionsContext);
 
   const [searchName, setSearchName] = useState('');
   const [selectedYear, setSelectedYear] = useState(null);
@@ -67,21 +89,32 @@ export default function ManagePayrollScreen({ navigation }) {
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [activeItem, setActiveItem] = useState(null);
-
-  // Move action buttons to header top-right
-  useEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <TouchableOpacity
-          onPress={() => setQuickActionsOpen(true)}
-          activeOpacity={0.8}
-          style={styles.headerActionBtn}
-        >
-          <Text style={styles.headerActionText}>+ Actions</Text>
-        </TouchableOpacity>
-      ),
-    });
-  }, [navigation]);
+  const [isActionLoading, setIsActionLoading] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [isEditSaving, setIsEditSaving] = useState(false);
+  const [editTarget, setEditTarget] = useState(null);
+  const [editForm, setEditForm] = useState({
+    payrollDate: '',
+    month: '',
+    paymentMode: '',
+    basic: '',
+    allowance: '',
+    deduction: '',
+  });
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const [breakdownLoading, setBreakdownLoading] = useState(false);
+  const [breakdownSaving, setBreakdownSaving] = useState(false);
+  const [breakdownTarget, setBreakdownTarget] = useState(null);
+  const [breakdownTypes, setBreakdownTypes] = useState([]);
+  const [breakdownEntries, setBreakdownEntries] = useState([]);
+  const [breakdownHistory, setBreakdownHistory] = useState([]);
+  const [typePickerOpen, setTypePickerOpen] = useState(false);
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
+  const [breakdownForm, setBreakdownForm] = useState({
+    type: '',
+    amount: '',
+    category: 1,
+  });
 
   const availableYears = useMemo(() => {
     const years = new Set();
@@ -124,7 +157,251 @@ export default function ManagePayrollScreen({ navigation }) {
   };
 
   const hasFilters = selectedYear || fromMonth || toMonth || searchName.trim();
+  const breakdownMonthLabel = breakdownTarget ? formatMonthLabel(breakdownTarget.month) : '-';
   const openActions = item => { setActiveItem(item); setActionsOpen(true); };
+
+  const openEditModal = item => {
+    if (!item) return;
+    const payrollDate = item.payrollDate ? String(item.payrollDate).slice(0, 10) : '';
+    const month = item.month ? String(item.month).slice(0, 7) : (payrollDate ? payrollDate.slice(0, 7) : '');
+    setEditTarget(item);
+    setEditForm({
+      payrollDate,
+      month,
+      paymentMode: item.paymentMode && item.paymentMode !== 'N/A' ? String(item.paymentMode) : 'Cash',
+      basic: String(Number(item.basic || 0)),
+      allowance: String(Number(item.allowance || 0)),
+      deduction: String(Number(item.deduction || 0)),
+    });
+    setActionsOpen(false);
+    setEditOpen(true);
+  };
+
+  const confirmDelete = item => {
+    if (!item) return;
+    Alert.alert(
+      'Delete Payroll',
+      `Delete payroll for ${item.employeeName}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setIsActionLoading(true);
+            try {
+              await deletePayroll(item.id);
+              setActionsOpen(false);
+              setActiveItem(null);
+              Alert.alert('Deleted', 'Payroll deleted successfully.');
+            } catch (error) {
+              Alert.alert(
+                'Could not delete',
+                error?.response?.data?.error || error?.response?.data?.message || 'Please try again.',
+              );
+            } finally {
+              setIsActionLoading(false);
+            }
+          },
+        },
+      ],
+      { cancelable: true },
+    );
+  };
+
+  const onPublishPayroll = async item => {
+    if (!item) return;
+    if (item.isPublished) {
+      Alert.alert('Already published', 'This payroll is already published.');
+      setActionsOpen(false);
+      return;
+    }
+    setIsActionLoading(true);
+    try {
+      await publishPayroll(item.id);
+      setActionsOpen(false);
+      setActiveItem(null);
+      Alert.alert('Published', 'Payroll published successfully.');
+    } catch (error) {
+      Alert.alert(
+        'Could not publish',
+        error?.response?.data?.error || error?.response?.data?.message || 'Please try again.',
+      );
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const onSaveEdit = async () => {
+    if (!editTarget) return;
+    const payrollDate = String(editForm.payrollDate || '').trim();
+    const month = String(editForm.month || payrollDate.slice(0, 7)).trim();
+    const paymentMode = String(editForm.paymentMode || '').trim();
+    const basic = Number(editForm.basic);
+    const allowance = Number(editForm.allowance);
+    const deduction = Number(editForm.deduction);
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(payrollDate)) {
+      Alert.alert('Invalid date', 'Use payroll date format YYYY-MM-DD.');
+      return;
+    }
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      Alert.alert('Invalid month', 'Use pay month format YYYY-MM.');
+      return;
+    }
+    if (!paymentMode) {
+      Alert.alert('Missing payment mode', 'Payment mode is required.');
+      return;
+    }
+    if ([basic, allowance, deduction].some(n => Number.isNaN(n) || n < 0)) {
+      Alert.alert('Invalid values', 'Basic, allowance and deduction must be 0 or higher.');
+      return;
+    }
+
+    setIsEditSaving(true);
+    try {
+      await updatePayroll(editTarget.id, {
+        employeeId: editTarget.employeeId,
+        payrollDate,
+        month,
+        paymentMode,
+        basic,
+        allowance,
+        deduction,
+        isPublished: !!editTarget.isPublished,
+      });
+      setEditOpen(false);
+      setEditTarget(null);
+      setActionsOpen(false);
+      setActiveItem(null);
+      Alert.alert('Updated', 'Payroll updated successfully.');
+    } catch (error) {
+      Alert.alert(
+        'Could not update payroll',
+        error?.response?.data?.error || error?.response?.data?.message || 'Please check values and try again.',
+      );
+    } finally {
+      setIsEditSaving(false);
+    }
+  };
+
+  const loadBreakdownData = async (item, preferredType = '') => {
+    if (!item) return;
+    const monthKey = getMonthKey(item.month, item.payrollDate);
+
+    const [typesResult, currentResult, historyResult] = await Promise.allSettled([
+      hrApi.get('/payroll-meta-types'),
+      hrApi.get(`/payrolls/employee/breakdown?payrollId=${encodeURIComponent(item.id)}`),
+      hrApi.get(`/payrolls/employee/${encodeURIComponent(item.employeeId)}/breakdowns`),
+    ]);
+
+    const metaRows = typesResult.status === 'fulfilled' && Array.isArray(typesResult.value?.data)
+      ? typesResult.value.data
+      : [];
+    const typeNames = metaRows
+      .map(r => String(r?.type_name || '').trim())
+      .filter(Boolean);
+
+    const currentRows = currentResult.status === 'fulfilled' && Array.isArray(currentResult.value?.data)
+      ? currentResult.value.data
+      : [];
+    setBreakdownEntries(currentRows);
+
+    const historyRows = historyResult.status === 'fulfilled' && Array.isArray(historyResult.value?.data)
+      ? historyResult.value.data
+      : [];
+    const monthHistory = historyRows.filter(row => {
+      const rowMonthKey = getMonthKey(row?.pay_month, null);
+      return rowMonthKey === monthKey;
+    });
+    setBreakdownHistory(monthHistory);
+
+    const fallbackTypes = ['Basic', 'HRA', 'PF', 'Incentive', 'Bonus', 'Tax'];
+    const allTypes = typeNames.length ? typeNames : fallbackTypes;
+    setBreakdownTypes(allTypes);
+    setBreakdownForm(prev => ({
+      ...prev,
+      type: preferredType || prev.type || allTypes[0] || '',
+    }));
+  };
+
+  const openBreakdownModal = async item => {
+    if (!item) return;
+    setActionsOpen(false);
+    setBreakdownTarget(item);
+    setBreakdownOpen(true);
+    setBreakdownLoading(true);
+    setBreakdownEntries([]);
+    setBreakdownHistory([]);
+    setBreakdownForm({ type: '', amount: '', category: 1 });
+    try {
+      await loadBreakdownData(item);
+    } catch (error) {
+      Alert.alert(
+        'Could not load breakdown',
+        error?.response?.data?.error || error?.response?.data?.message || 'Please try again.',
+      );
+    } finally {
+      setBreakdownLoading(false);
+    }
+  };
+
+  const onAddBreakdown = async () => {
+    if (!breakdownTarget || breakdownSaving) return;
+
+    const amount = Number(breakdownForm.amount);
+    const type = String(breakdownForm.type || '').trim();
+    const category = Number(breakdownForm.category || 1);
+
+    if (!type) {
+      Alert.alert('Missing type', 'Please select a breakdown type.');
+      return;
+    }
+    if (Number.isNaN(amount) || amount <= 0) {
+      Alert.alert('Invalid amount', 'Please enter a valid amount greater than 0.');
+      return;
+    }
+
+    setBreakdownSaving(true);
+    try {
+      await hrApi.post('/payrolls/employeeBreakdown/breakdown', {
+        fk_payroll_id: Number(breakdownTarget.id),
+        amount,
+        type,
+        category,
+      });
+      setBreakdownForm(prev => ({ ...prev, amount: '' }));
+      await loadBreakdownData(breakdownTarget, type);
+      Alert.alert('Added', 'Breakdown entry added successfully.');
+    } catch (error) {
+      Alert.alert(
+        'Could not add breakdown',
+        error?.response?.data?.error || error?.response?.data?.message || 'Please check values and try again.',
+      );
+    } finally {
+      setBreakdownSaving(false);
+    }
+  };
+
+  const onActionSelect = label => {
+    if (!activeItem || isActionLoading) return;
+    if (label === 'Edit') {
+      openEditModal(activeItem);
+      return;
+    }
+    if (label === 'Delete') {
+      confirmDelete(activeItem);
+      return;
+    }
+    if (label === 'Publish' || label === 'Published') {
+      onPublishPayroll(activeItem);
+      return;
+    }
+    if (label === 'Manage Breakdown') {
+      openBreakdownModal(activeItem);
+      return;
+    }
+  };
 
   return (
     <Screen>
@@ -261,6 +538,17 @@ export default function ManagePayrollScreen({ navigation }) {
         )}
       </ScrollView>
 
+      <View pointerEvents="box-none" style={styles.fabWrap}>
+        <TouchableOpacity
+          onPress={() => setQuickActionsOpen(true)}
+          activeOpacity={0.85}
+          style={styles.fabActionBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={styles.fabActionText}>+ Actions</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Year picker modal */}
       <Modal visible={yearPickerOpen} transparent animationType="fade" onRequestClose={() => setYearPickerOpen(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setYearPickerOpen(false)}>
@@ -356,13 +644,291 @@ export default function ManagePayrollScreen({ navigation }) {
         </Pressable>
       </Modal>
 
+      {/* Edit payroll modal */}
+      <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => setEditOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => !isEditSaving && setEditOpen(false)}>
+          <Pressable style={styles.actionsModal} onPress={() => {}}>
+            <Text style={styles.actionsTitle}>Edit Payroll</Text>
+            <Text style={styles.editHint}>{editTarget?.employeeName || ''}</Text>
+
+            <Text style={styles.editLabel}>Payroll Date (YYYY-MM-DD)</Text>
+            <TextInput
+              style={styles.editInput}
+              value={editForm.payrollDate}
+              onChangeText={value => setEditForm(prev => ({ ...prev, payrollDate: value }))}
+              placeholder="2026-05-13"
+              placeholderTextColor="#94a3b8"
+              autoCapitalize="none"
+            />
+
+            <Text style={styles.editLabel}>Pay Month (YYYY-MM)</Text>
+            <TextInput
+              style={styles.editInput}
+              value={editForm.month}
+              onChangeText={value => setEditForm(prev => ({ ...prev, month: value }))}
+              placeholder="2026-05"
+              placeholderTextColor="#94a3b8"
+              autoCapitalize="none"
+            />
+
+            <Text style={styles.editLabel}>Payment Mode</Text>
+            <TextInput
+              style={styles.editInput}
+              value={editForm.paymentMode}
+              onChangeText={value => setEditForm(prev => ({ ...prev, paymentMode: value }))}
+              placeholder="Cash / NEFT / UPI"
+              placeholderTextColor="#94a3b8"
+            />
+
+            <View style={styles.editRow}>
+              <View style={styles.editField}>
+                <Text style={styles.editLabel}>Basic</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editForm.basic}
+                  onChangeText={value => setEditForm(prev => ({ ...prev, basic: value }))}
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={styles.editField}>
+                <Text style={styles.editLabel}>Allowance</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editForm.allowance}
+                  onChangeText={value => setEditForm(prev => ({ ...prev, allowance: value }))}
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
+
+            <Text style={styles.editLabel}>Deduction</Text>
+            <TextInput
+              style={styles.editInput}
+              value={editForm.deduction}
+              onChangeText={value => setEditForm(prev => ({ ...prev, deduction: value }))}
+              keyboardType="numeric"
+            />
+
+            <View style={styles.editActionRow}>
+              <Pressable
+                style={[styles.editActionBtn, styles.editCancelBtn]}
+                disabled={isEditSaving}
+                onPress={() => setEditOpen(false)}
+              >
+                <Text style={styles.editCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.editActionBtn, styles.editSaveBtn, isEditSaving && { opacity: 0.65 }]}
+                disabled={isEditSaving}
+                onPress={onSaveEdit}
+              >
+                <Text style={styles.editSaveText}>{isEditSaving ? 'Saving...' : 'Save'}</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Manage breakdown modal */}
+      <Modal visible={breakdownOpen} transparent animationType="slide" onRequestClose={() => setBreakdownOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => !breakdownSaving && setBreakdownOpen(false)}>
+          <Pressable style={styles.breakdownModal} onPress={() => {}}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <View style={styles.breakdownHeader}>
+              <Text style={styles.breakdownTitle}>Manage Breakdown</Text>
+              <Pressable
+                onPress={() => setBreakdownOpen(false)}
+                hitSlop={8}
+                style={({ pressed }) => [styles.breakdownCloseBtn, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.breakdownCloseText}>X</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.breakdownFormCard}>
+              <View style={styles.breakdownFormRow}>
+                <View style={styles.breakdownField}>
+                  <Text style={styles.breakdownFieldLabel}>Type</Text>
+                  <Pressable style={styles.breakdownSelect} onPress={() => setTypePickerOpen(true)}>
+                    <Text style={styles.breakdownSelectText} numberOfLines={1}>
+                      {breakdownForm.type || 'Select Type'}
+                    </Text>
+                    <Text style={styles.breakdownSelectIcon}>v</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.breakdownField}>
+                  <Text style={styles.breakdownFieldLabel}>Amount</Text>
+                  <TextInput
+                    style={styles.breakdownInput}
+                    value={breakdownForm.amount}
+                    onChangeText={value => setBreakdownForm(prev => ({ ...prev, amount: value }))}
+                    keyboardType="numeric"
+                    placeholder="0"
+                    placeholderTextColor="#94a3b8"
+                  />
+                </View>
+
+                <View style={styles.breakdownField}>
+                  <Text style={styles.breakdownFieldLabel}>Category</Text>
+                  <Pressable style={styles.breakdownSelect} onPress={() => setCategoryPickerOpen(true)}>
+                    <Text style={styles.breakdownSelectText} numberOfLines={1}>
+                      {categoryLabel(breakdownForm.category)}
+                    </Text>
+                    <Text style={styles.breakdownSelectIcon}>v</Text>
+                  </Pressable>
+                </View>
+              </View>
+
+              <View style={styles.breakdownAddRow}>
+                <Pressable
+                  onPress={onAddBreakdown}
+                  disabled={breakdownSaving || breakdownLoading}
+                  style={[styles.breakdownAddBtn, (breakdownSaving || breakdownLoading) && { opacity: 0.7 }]}
+                >
+                  <Text style={styles.breakdownAddBtnText}>
+                    {breakdownSaving ? 'Adding...' : 'Add Breakdown'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+
+            {breakdownLoading ? (
+              <View style={styles.breakdownEmptyWrap}>
+                <Text style={styles.breakdownEmptyText}>Loading breakdowns...</Text>
+              </View>
+            ) : breakdownEntries.length === 0 ? (
+              <View style={styles.breakdownEmptyWrap}>
+                <Text style={styles.breakdownEmptyText}>No breakdown entries yet.</Text>
+              </View>
+            ) : (
+              <View style={styles.breakdownCurrentWrap}>
+                {breakdownEntries.map((row, idx) => (
+                  <View key={`${row?.id || 'entry'}-${idx}`} style={styles.breakdownCurrentRow}>
+                    <Text style={styles.breakdownCurrentType}>{row?.type || '-'}</Text>
+                    <View style={[
+                      styles.breakdownCatBadge,
+                      Number(row?.category) === 2 ? styles.breakdownCatDeduct : styles.breakdownCatEarn,
+                    ]}>
+                      <Text style={[
+                        styles.breakdownCatBadgeText,
+                        Number(row?.category) === 2 ? styles.breakdownCatDeductText : styles.breakdownCatEarnText,
+                      ]}>
+                        {categoryLabel(row?.category)}
+                      </Text>
+                    </View>
+                    <Text style={styles.breakdownCurrentAmount}>{formatMoney(row?.amount || 0)}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <Text style={styles.breakdownHistoryTitle}>Breakdown History</Text>
+            <Text style={styles.breakdownHistorySub}>
+              Showing only {breakdownMonthLabel} (other payrolls for this month)
+            </Text>
+
+            {breakdownHistory.length === 0 ? (
+              <View style={styles.breakdownHistoryEmptyWrap}>
+                <Text style={styles.breakdownHistoryEmptyText}>No history for this month.</Text>
+              </View>
+            ) : (
+              <View style={styles.breakdownTableWrap}>
+                <View style={styles.breakdownTableHeader}>
+                  <Text style={[styles.breakdownTh, styles.breakdownTypeCol]}>Type</Text>
+                  <Text style={[styles.breakdownTh, styles.breakdownCategoryCol]}>Category</Text>
+                  <Text style={[styles.breakdownTh, styles.breakdownAmountCol]}>Amount</Text>
+                </View>
+                <ScrollView style={styles.breakdownTableBody} nestedScrollEnabled>
+                  {breakdownHistory.map((row, idx) => (
+                    <View key={`${row?.id || 'history'}-${idx}`} style={styles.breakdownTr}>
+                      <Text style={[styles.breakdownTd, styles.breakdownTypeCol]} numberOfLines={1}>
+                        {row?.type || '-'}
+                      </Text>
+                      <View style={[styles.breakdownCategoryCol, styles.breakdownCategoryCell]}>
+                        <View style={[
+                          styles.breakdownCatBadge,
+                          Number(row?.category) === 2 ? styles.breakdownCatDeduct : styles.breakdownCatEarn,
+                        ]}>
+                          <Text style={[
+                            styles.breakdownCatBadgeText,
+                            Number(row?.category) === 2 ? styles.breakdownCatDeductText : styles.breakdownCatEarnText,
+                          ]}>
+                            {categoryLabel(row?.category)}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.breakdownTd, styles.breakdownAmountCol]}>
+                        {formatMoney(row?.amount || 0)}
+                      </Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Breakdown type picker */}
+      <Modal visible={typePickerOpen} transparent animationType="fade" onRequestClose={() => setTypePickerOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setTypePickerOpen(false)}>
+          <Pressable style={styles.pickerModal} onPress={() => {}}>
+            <Text style={styles.pickerTitle}>Select Type</Text>
+            {(breakdownTypes.length ? breakdownTypes : ['Basic', 'HRA', 'PF', 'Incentive', 'Bonus', 'Tax']).map(typeName => (
+              <Pressable
+                key={typeName}
+                onPress={() => {
+                  setBreakdownForm(prev => ({ ...prev, type: typeName }));
+                  setTypePickerOpen(false);
+                }}
+                style={[styles.yearItem, breakdownForm.type === typeName && styles.yearItemActive]}
+              >
+                <Text style={[styles.yearItemText, breakdownForm.type === typeName && styles.yearItemTextActive]}>
+                  {typeName}
+                </Text>
+              </Pressable>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Breakdown category picker */}
+      <Modal visible={categoryPickerOpen} transparent animationType="fade" onRequestClose={() => setCategoryPickerOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setCategoryPickerOpen(false)}>
+          <Pressable style={styles.pickerModal} onPress={() => {}}>
+            <Text style={styles.pickerTitle}>Select Category</Text>
+            {BREAKDOWN_CATEGORIES.map(cat => (
+              <Pressable
+                key={cat.value}
+                onPress={() => {
+                  setBreakdownForm(prev => ({ ...prev, category: cat.value }));
+                  setCategoryPickerOpen(false);
+                }}
+                style={[styles.yearItem, Number(breakdownForm.category) === cat.value && styles.yearItemActive]}
+              >
+                <Text style={[styles.yearItemText, Number(breakdownForm.category) === cat.value && styles.yearItemTextActive]}>
+                  {cat.label}
+                </Text>
+              </Pressable>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* Row actions modal */}
       <Modal visible={actionsOpen} transparent animationType="fade" onRequestClose={() => setActionsOpen(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setActionsOpen(false)}>
           <Pressable style={styles.actionsModal} onPress={() => {}}>
             <Text style={styles.actionsTitle}>{activeItem?.employeeName || 'Actions'}</Text>
-            {['Edit', 'Delete', 'Toggle Published', 'Manage Breakdown'].map(label => (
-              <Pressable key={label} style={styles.actionMenuItem} onPress={() => setActionsOpen(false)}>
+            {['Edit', 'Delete', activeItem?.isPublished ? 'Published' : 'Publish', 'Manage Breakdown'].map(label => (
+              <Pressable
+                key={label}
+                style={[styles.actionMenuItem, isActionLoading && { opacity: 0.6 }]}
+                disabled={isActionLoading}
+                onPress={() => onActionSelect(label)}
+              >
                 <Text style={[styles.actionMenuText, label === 'Delete' && styles.actionMenuTextDanger]}>{label}</Text>
               </Pressable>
             ))}
@@ -374,15 +940,28 @@ export default function ManagePayrollScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  /* Header button (set via navigation.setOptions) */
-  headerActionBtn: {
-    backgroundColor: THEME,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginRight: 12,
+  fabWrap: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 999,
+    elevation: 999,
   },
-  headerActionText: { color: '#fff', fontWeight: '800', fontSize: 12 },
+  /* Floating action button */
+  fabActionBtn: {
+    position: 'absolute',
+    right: 16,
+    bottom: 28,
+    backgroundColor: THEME,
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    zIndex: 1000,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.22,
+    shadowRadius: 6,
+    elevation: 12,
+  },
+  fabActionText: { color: '#fff', fontWeight: '800', fontSize: 14 },
 
   /* Filter card */
   filterCard: { marginBottom: 10, gap: 10 },
@@ -428,7 +1007,7 @@ const styles = StyleSheet.create({
   summaryText: { fontSize: 11, fontWeight: '600', color: '#94a3b8' },
 
   /* Scroll */
-  scrollContent: { paddingBottom: 24 },
+  scrollContent: { paddingBottom: 96 },
 
   /* Month group */
   monthHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, marginTop: 6 },
@@ -509,7 +1088,158 @@ const styles = StyleSheet.create({
   quickActionIcon: { fontSize: 14, color: THEME, fontWeight: '800' },
   quickActionText: { fontSize: 13, fontWeight: '700', color: '#0f172a' },
 
+  editHint: { color: '#64748b', fontSize: 12, marginTop: -6, marginBottom: 10 },
+  editRow: { flexDirection: 'row', gap: 10 },
+  editField: { flex: 1 },
+  editLabel: { fontSize: 11, fontWeight: '700', color: '#475569', marginBottom: 6 },
+  editInput: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: '#0f172a',
+    backgroundColor: '#f8fafc',
+    marginBottom: 10,
+  },
+  editActionRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  editActionBtn: { flex: 1, borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
+  editCancelBtn: { backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
+  editSaveBtn: { backgroundColor: THEME },
+  editCancelText: { color: '#475569', fontWeight: '700', fontSize: 13 },
+  editSaveText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+
   actionMenuItem: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   actionMenuText: { fontSize: 13, fontWeight: '700', color: '#0f172a' },
   actionMenuTextDanger: { color: '#dc2626' },
+
+  /* ── Breakdown modal ─────────────────────────────────────────────────── */
+  breakdownModal: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 18,
+    maxHeight: '90%',
+  },
+  breakdownHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  breakdownTitle: { fontSize: 17, fontWeight: '900', color: '#0f172a' },
+  breakdownCloseBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#fee2e2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  breakdownCloseText: { fontSize: 13, fontWeight: '900', color: '#dc2626' },
+
+  /* Form card */
+  breakdownFormCard: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 12,
+    marginBottom: 14,
+  },
+  breakdownFormRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  breakdownField: { flex: 1 },
+  breakdownFieldLabel: { fontSize: 10, fontWeight: '800', color: '#64748b', marginBottom: 4 },
+  breakdownSelect: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+  },
+  breakdownSelectText: { fontSize: 12, fontWeight: '600', color: '#374151', flex: 1 },
+  breakdownSelectIcon: { fontSize: 10, color: '#94a3b8' },
+  breakdownInput: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    fontSize: 12,
+    color: '#0f172a',
+    backgroundColor: '#fff',
+  },
+  breakdownAddRow: { alignItems: 'flex-end' },
+  breakdownAddBtn: {
+    backgroundColor: THEME,
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+  },
+  breakdownAddBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+
+  /* Current entries */
+  breakdownEmptyWrap: { alignItems: 'center', paddingVertical: 16 },
+  breakdownEmptyText: { color: '#94a3b8', fontWeight: '600', fontSize: 13 },
+  breakdownCurrentWrap: { marginBottom: 14, gap: 6 },
+  breakdownCurrentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  breakdownCurrentType: { fontSize: 13, fontWeight: '700', color: '#0f172a', flex: 1 },
+  breakdownCurrentAmount: { fontSize: 13, fontWeight: '800', color: '#0f172a' },
+
+  /* Category badge */
+  breakdownCatBadge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, marginHorizontal: 6 },
+  breakdownCatEarn: { backgroundColor: '#dcfce7' },
+  breakdownCatDeduct: { backgroundColor: '#fee2e2' },
+  breakdownCatBadgeText: { fontSize: 11, fontWeight: '700' },
+  breakdownCatEarnText: { color: '#15803d' },
+  breakdownCatDeductText: { color: '#b91c1c' },
+
+  /* History table */
+  breakdownHistoryTitle: { fontSize: 14, fontWeight: '900', color: '#0f172a', marginBottom: 2 },
+  breakdownHistorySub: { fontSize: 11, fontWeight: '600', color: '#94a3b8', marginBottom: 10 },
+  breakdownHistoryEmptyWrap: { alignItems: 'center', paddingVertical: 12 },
+  breakdownHistoryEmptyText: { color: '#94a3b8', fontSize: 12, fontWeight: '600' },
+  breakdownTableWrap: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  breakdownTableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#f1f5f9',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  breakdownTh: { fontSize: 11, fontWeight: '800', color: '#475569' },
+  breakdownTableBody: { maxHeight: 180 },
+  breakdownTr: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  breakdownTd: { fontSize: 12, fontWeight: '600', color: '#334155' },
+  breakdownTypeCol: { flex: 1 },
+  breakdownCategoryCol: { width: 90 },
+  breakdownCategoryCell: { alignItems: 'flex-start' },
+  breakdownAmountCol: { width: 90, textAlign: 'right' },
 });
