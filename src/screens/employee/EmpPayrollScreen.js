@@ -1,7 +1,6 @@
-﻿import React, { useContext, useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import FileViewer from 'react-native-file-viewer';
 import { AuthContext } from '../../state/AuthContext';
 import { AppStoreContext } from '../../state/AppStore';
 import hrApi from '../../api/hrApi';
@@ -340,7 +339,16 @@ export default function EmpPayrollScreen() {
 
   const onDownloadPayslip = async payslip => {
     try {
+      if (Platform.OS === 'web') {
+        Alert.alert(
+          'Not available on web',
+          'Payslip download/open is currently available on Android/iOS only.',
+        );
+        return;
+      }
+
       const pdfModule = require('react-native-html-to-pdf');
+      const FileViewer = require('react-native-file-viewer');
       const generatePDF = pdfModule.generatePDF || pdfModule.default?.generatePDF || pdfModule.convert;
       if (!generatePDF) throw new Error('PDF generator method not found.');
 
