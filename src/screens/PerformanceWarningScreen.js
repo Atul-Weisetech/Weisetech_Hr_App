@@ -3,6 +3,7 @@ import {
   FlatList,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -65,6 +66,7 @@ export default function PerformanceWarningScreen() {
 
   const onIssue = async () => {
     if (!selectedEmployee) return;
+
     await addWarning({
       employeeId: selectedEmployee.id,
       employeeName: selectedEmployee.name,
@@ -72,6 +74,7 @@ export default function PerformanceWarningScreen() {
       date,
       severity,
     });
+
     setReason('');
     setSeverity('Medium');
     setShowWarningForm(false);
@@ -88,101 +91,16 @@ export default function PerformanceWarningScreen() {
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Issue Warning</Text>
           <Pressable
-            onPress={() => setShowWarningForm(prev => !prev)}
+            onPress={() => setShowWarningForm(true)}
             style={({ pressed }) => [styles.topActionBtn, pressed && { opacity: 0.9 }]}
           >
-            <Text style={styles.topActionBtnText}>
-              {showWarningForm ? 'Close Form' : 'Create Warning'}
-            </Text>
+            <Text style={styles.topActionBtnText}>Create Warning</Text>
           </Pressable>
         </View>
 
-        <Text style={styles.label}>Manage Warning Type</Text>
-        <View style={styles.addTypeRow}>
-          <TextInput
-            value={newWarningType}
-            onChangeText={setNewWarningType}
-            style={[styles.input, styles.typeInput]}
-            placeholder="Add warning type"
-            placeholderTextColor="#9ca3af"
-          />
-          <Pressable
-            onPress={addWarningType}
-            style={({ pressed }) => [styles.addTypeBtn, pressed && { opacity: 0.9 }]}
-          >
-            <Text style={styles.addTypeBtnText}>Add Type</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.pillsRowWrap}>
-          {warningTypes.map(type => (
-            <Pressable
-              key={type}
-              onPress={() => {
-                setSeverity(type);
-                setReason(`${type} warning`);
-              }}
-              style={({ pressed }) => [
-                styles.pill,
-                severity === type && styles.pillActive,
-                pressed && { opacity: 0.9 },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.pillText,
-                  severity === type && styles.pillTextActive,
-                ]}
-              >
-                {type}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
-        {showWarningForm ? (
-          <>
-            <Text style={styles.label}>Employee</Text>
-            <Pressable
-              onPress={() => setPickerOpen(true)}
-              style={({ pressed }) => [styles.selector, pressed && { opacity: 0.9 }]}
-            >
-              <Text style={styles.selectorText}>
-                {selectedEmployee
-                  ? `${selectedEmployee.name} (${selectedEmployee.id})`
-                  : 'Select employee'}
-              </Text>
-              <Text style={styles.chevron}>?</Text>
-            </Pressable>
-
-            <Text style={styles.label}>Reason</Text>
-            <TextInput
-              value={reason}
-              onChangeText={setReason}
-              style={styles.input}
-              placeholder="Enter warning reason..."
-              placeholderTextColor="#9ca3af"
-              multiline
-            />
-
-            <View style={styles.grid}>
-              <View style={styles.col}>
-                <Text style={styles.label}>Date (YYYY-MM-DD)</Text>
-                <TextInput
-                  value={date}
-                  onChangeText={setDate}
-                  style={styles.input}
-                  placeholder="2026-02-23"
-                  placeholderTextColor="#9ca3af"
-                />
-              </View>
-            </View>
-
-            <View style={{ marginTop: 12 }}>
-              <PrimaryButton title="Issue Warning" onPress={onIssue} />
-            </View>
-          </>
-        ) : null}
+        <Text style={styles.subtitle}>
+          Open the pop-out form to add a new warning without hiding the previous list.
+        </Text>
       </Card>
 
       <Card style={{ flex: 1 }}>
@@ -202,15 +120,20 @@ export default function PerformanceWarningScreen() {
               <View style={styles.warningCard}>
                 <View style={styles.warningCardTopRow}>
                   <Text style={styles.warningLineOne}>
-                    {item.employeeName} � {warningType}
+                    {item.employeeName} â€¢ {warningType}
                   </Text>
-                  <Pressable style={({ pressed }) => [styles.warningAction, pressed && { opacity: 0.85 }]}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.warningAction,
+                      pressed && { opacity: 0.85 },
+                    ]}
+                  >
                     <Text style={styles.warningActionText}>Action</Text>
                   </Pressable>
                 </View>
 
                 <Text style={styles.warningLineTwo}>
-                  {item.reason} � {item.createdBy || 'HR Admin'}
+                  {item.reason} â€¢ {item.createdBy || 'HR Admin'}
                 </Text>
 
                 <Text style={styles.warningDate}>Created at: {item.date || '-'}</Text>
@@ -218,11 +141,119 @@ export default function PerformanceWarningScreen() {
             );
           }}
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>No warnings found.</Text>
-          }
+          ListEmptyComponent={<Text style={styles.emptyText}>No warnings found.</Text>}
         />
       </Card>
+
+      <Modal
+        visible={showWarningForm}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowWarningForm(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowWarningForm(false)}>
+          <Pressable style={styles.formModalCard} onPress={() => {}}>
+            <View style={styles.formModalHeader}>
+              <Text style={styles.formModalTitle}>Issue Warning</Text>
+              <Pressable
+                onPress={() => setShowWarningForm(false)}
+                style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.85 }]}
+              >
+                <Text style={styles.closeBtnText}>Close</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={styles.formModalScroll}
+              contentContainerStyle={styles.formModalBody}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Text style={styles.label}>Manage Warning Type</Text>
+              <View style={styles.addTypeRow}>
+                <TextInput
+                  value={newWarningType}
+                  onChangeText={setNewWarningType}
+                  style={[styles.input, styles.typeInput]}
+                  placeholder="Add warning type"
+                  placeholderTextColor="#9ca3af"
+                />
+                <Pressable
+                  onPress={addWarningType}
+                  style={({ pressed }) => [styles.addTypeBtn, pressed && { opacity: 0.9 }]}
+                >
+                  <Text style={styles.addTypeBtnText}>Add Type</Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.pillsRowWrap}>
+                {warningTypes.map(type => (
+                  <Pressable
+                    key={type}
+                    onPress={() => {
+                      setSeverity(type);
+                      setReason(`${type} warning`);
+                    }}
+                    style={({ pressed }) => [
+                      styles.pill,
+                      severity === type && styles.pillActive,
+                      pressed && { opacity: 0.9 },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.pillText,
+                        severity === type && styles.pillTextActive,
+                      ]}
+                    >
+                      {type}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text style={styles.label}>Employee</Text>
+              <Pressable
+                onPress={() => setPickerOpen(true)}
+                style={({ pressed }) => [styles.selector, pressed && { opacity: 0.9 }]}
+              >
+                <Text style={styles.selectorText}>
+                  {selectedEmployee
+                    ? `${selectedEmployee.name} (${selectedEmployee.id})`
+                    : 'Select employee'}
+                </Text>
+                <Text style={styles.chevron}>?</Text>
+              </Pressable>
+
+              <Text style={styles.label}>Reason</Text>
+              <TextInput
+                value={reason}
+                onChangeText={setReason}
+                style={styles.input}
+                placeholder="Enter warning reason..."
+                placeholderTextColor="#9ca3af"
+                multiline
+              />
+
+              <View style={styles.grid}>
+                <View style={styles.col}>
+                  <Text style={styles.label}>Date (YYYY-MM-DD)</Text>
+                  <TextInput
+                    value={date}
+                    onChangeText={setDate}
+                    style={styles.input}
+                    placeholder="2026-02-23"
+                    placeholderTextColor="#9ca3af"
+                  />
+                </View>
+              </View>
+
+              <View style={{ marginTop: 12 }}>
+                <PrimaryButton title="Issue Warning" onPress={onIssue} />
+              </View>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={pickerOpen}
@@ -233,22 +264,29 @@ export default function PerformanceWarningScreen() {
         <Pressable style={styles.modalBackdrop} onPress={() => setPickerOpen(false)}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <Text style={styles.modalTitle}>Select Employee</Text>
-            {employees.map(e => (
-              <Pressable
-                key={e.id}
-                onPress={() => {
-                  setEmployeeId(e.id);
-                  setPickerOpen(false);
-                }}
-                style={({ pressed }) => [
-                  styles.modalRow,
-                  pressed && { backgroundColor: '#f1f5f9' },
-                ]}
-              >
-                <Text style={styles.modalRowTitle}>{e.name}</Text>
-                <Text style={styles.modalRowSub}>{e.id}</Text>
-              </Pressable>
-            ))}
+            <ScrollView
+              style={styles.pickerListScroll}
+              contentContainerStyle={styles.pickerListContent}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+            >
+              {employees.map(e => (
+                <Pressable
+                  key={e.id}
+                  onPress={() => {
+                    setEmployeeId(e.id);
+                    setPickerOpen(false);
+                  }}
+                  style={({ pressed }) => [
+                    styles.modalRow,
+                    pressed && { backgroundColor: '#f1f5f9' },
+                  ]}
+                >
+                  <Text style={styles.modalRowTitle}>{e.name}</Text>
+                  <Text style={styles.modalRowSub}>{e.id}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
@@ -403,6 +441,53 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
     overflow: 'hidden',
+    maxHeight: '75%',
+  },
+  pickerListScroll: {
+    maxHeight: 420,
+  },
+  pickerListContent: {
+    paddingBottom: 8,
+  },
+  formModalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    overflow: 'hidden',
+    maxHeight: '88%',
+  },
+  formModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingLeft: 14,
+    paddingRight: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  formModalTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#0f172a',
+  },
+  formModalScroll: {
+    maxHeight: '100%',
+  },
+  formModalBody: {
+    padding: 14,
+  },
+  closeBtn: {
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  closeBtnText: {
+    color: '#fff',
+    fontWeight: '900',
+    fontSize: 12,
   },
   modalTitle: {
     padding: 14,

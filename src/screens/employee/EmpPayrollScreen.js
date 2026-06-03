@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState } from 'react';
+﻿import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AuthContext } from '../../state/AuthContext';
@@ -204,7 +204,7 @@ export default function EmpPayrollScreen() {
               <div class="brandRight">
                 <div class="company">EZ INFOWAYS PRIVATE LIMITED</div>
                 <div class="addr">B-501 RUDRA PLAZA NR. PATEL PAN HOUSE JUDGES BUNGLOWS CHAR RASTA BODAKDEV, AHMEDABAD</div>
-                <div class="addr">Gujarat, India - 380054 | +91 79 4000 0000</div>
+                <div class="addr">Gujarat, India - 380054 | +1 647 768-6933 | info@weisetech.com</div>
               </div>
             </div>
 

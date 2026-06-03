@@ -1,4 +1,7 @@
 {
   "name": "hr",
-  "displayName": "hr"
+  "displayName": "hr",
+  "plugins": [
+    "@react-native-community/datetimepicker"
+  ]
 }

@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -86,13 +86,21 @@ export default function EmployeeDetailsScreen() {
   const [actionEmployee, setActionEmployee] = useState(null);
 
   const [form, setForm] = useState({
-    name: '',
-    role: '',
+    firstName: '',
+    lastName: '',
     email: '',
+    designation: '',
+    dateOfBirth: '',
+    city: '',
+    state: '',
+    postalCode: '',
+    addressLine1: '',
+    addressLine2: '',
     salary: '',
-    deductions: '',
+    deduction: '',
     joiningDate: '',
-    status: 'Active',
+    confirmationStatus: 'Pending',
+    probationStatus: 'No',
   });
   const [addUserType, setAddUserType] = useState('employee');
 
@@ -104,11 +112,15 @@ export default function EmployeeDetailsScreen() {
   const onChangeField = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
 
   const resetForm = () => {
-    setForm({ name: '', role: '', email: '', salary: '', deductions: '', joiningDate: '', status: 'Active' });
+    setForm({
+      firstName: '', lastName: '', email: '', designation: '', dateOfBirth: '',
+      city: '', state: '', postalCode: '', addressLine1: '', addressLine2: '',
+      salary: '', deduction: '', joiningDate: '', confirmationStatus: 'Pending', probationStatus: 'No',
+    });
     setAddUserType('employee');
   };
 
-  const loadEmployees = () => {
+  const loadEmployees = useCallback(() => {
     const includeHR = canAddHrAccount ? '?includeHR=true' : '';
     hrApi
       .get(`/employees${includeHR}`)
@@ -119,42 +131,49 @@ export default function EmployeeDetailsScreen() {
       .catch(error => {
         Alert.alert('Could not load employees', error?.response?.data?.error || 'Backend connection failed.');
       });
-  };
+  }, [canAddHrAccount]);
 
-  useEffect(() => { loadEmployees(); }, [canAddHrAccount]);
+  useEffect(() => { loadEmployees(); }, [loadEmployees]);
 
   const onAddEmployee = async () => {
-    const trimmedName = form.name.trim();
+    const firstName = form.firstName.trim();
+    const lastName  = form.lastName.trim();
     const trimmedEmail = form.email.trim().toLowerCase();
-    if (!trimmedName || !trimmedEmail) {
-      Alert.alert('Missing fields', 'Name and Email are required.');
+    if (!firstName || !trimmedEmail) {
+      Alert.alert('Missing fields', 'First name and Email are required.');
       return;
     }
-    const [firstName, ...rest] = trimmedName.split(' ');
-    const lastName = rest.join(' ');
 
-    // Send both email + email_address so both local and hosted backends validate correctly.
-    // Local backend strips `email` and `password` before INSERT (safe).
-    // Hosted backend validates `email` + `password` before creating the account.
     const primaryPayload = {
       first_name: firstName,
-      last_name: lastName || '',
+      last_name: lastName,
       email_address: trimmedEmail,
       email: trimmedEmail,
-      designation: form.role.trim() || 'Employee',
+      designation: form.designation.trim() || 'Employee',
+      date_of_birth: form.dateOfBirth.trim() || null,
+      city: form.city.trim() || null,
+      state: form.state.trim() || null,
+      postal_code: form.postalCode.trim() || null,
+      address_line1: form.addressLine1.trim() || null,
+      address_line2: form.addressLine2.trim() || null,
       salary: Number(form.salary || 0),
-      deduction: Number(form.deductions || 0),
+      deduction: Number(form.deduction || 0),
       joining_date: form.joiningDate.trim() || null,
+      confirmation_status: form.confirmationStatus,
+      probation_status: form.probationStatus,
     };
 
-    // /add-hr uses named fields (not SET ?) and validates `email`
     const hrPayload = {
       firstname: firstName,
-      lastname: lastName || '',
+      lastname: lastName,
       email: trimmedEmail,
       salary: Number(form.salary || 0),
-      deduction: Number(form.deductions || 0),
+      deduction: Number(form.deduction || 0),
       joiningDate: form.joiningDate.trim() || null,
+      dateOfBirth: form.dateOfBirth.trim() || null,
+      address: [form.addressLine1, form.city, form.state, form.postalCode].filter(Boolean).join(', ') || null,
+      confirmationStatus: form.confirmationStatus,
+      probationStatus: form.probationStatus,
     };
 
     try {
@@ -180,32 +199,34 @@ export default function EmployeeDetailsScreen() {
 
   const onOpenEdit = employee => {
     setEditingId(employee.id);
+    const nameParts = (employee.name || '').trim().split(' ');
     setForm({
-      name: employee.name,
-      role: employee.role,
-      email: employee.email,
+      firstName: nameParts[0] || '',
+      lastName: nameParts.slice(1).join(' ') || '',
+      email: employee.email || '',
+      designation: employee.role || '',
+      dateOfBirth: '', city: '', state: '', postalCode: '',
+      addressLine1: '', addressLine2: '',
       salary: String(parseMoney(employee.salary)),
-      deductions: String(parseMoney(employee.deductions)),
+      deduction: String(parseMoney(employee.deductions)),
       joiningDate: employee.joiningDate === '-' ? '' : employee.joiningDate,
-      status: employee.status,
+      confirmationStatus: 'Pending',
+      probationStatus: 'No',
     });
     setEditOpen(true);
   };
 
   const onSaveEdit = () => {
     if (!editingId) return;
-    const trimmedName = form.name.trim();
     const trimmedEmail = form.email.trim().toLowerCase();
-    const [firstName, ...rest] = trimmedName.split(' ');
-    const lastName = rest.join(' ');
     hrApi
       .put(`/employees/${editingId}`, {
-        first_name: firstName,
-        last_name: lastName,
+        first_name: form.firstName.trim(),
+        last_name: form.lastName.trim(),
         email_address: trimmedEmail,
-        designation: form.role.trim() || 'Employee',
+        designation: form.designation.trim() || 'Employee',
         salary: Number(form.salary || 0),
-        deduction: Number(form.deductions || 0),
+        deduction: Number(form.deduction || 0),
         joining_date: form.joiningDate.trim() || null,
       })
       .then(() => { setEditOpen(false); setEditingId(null); resetForm(); loadEmployees(); })
@@ -314,7 +335,7 @@ export default function EmployeeDetailsScreen() {
       </View>
 
       {/* Row 3: Deduction + Joining Date */}
-      <View style={[styles.cardRow, { marginTop: 8 }]}>
+      <View style={[styles.cardRow, styles.cardRowSpaced]}>
         <View style={styles.cardCell}>
           <Text style={styles.cellLabel}>Deduction</Text>
           <Text style={styles.cellValue}>{item.deductions}</Text>
@@ -332,7 +353,7 @@ export default function EmployeeDetailsScreen() {
       {/* Header */}
       <Card style={styles.headerCard}>
         <View style={styles.headerRow}>
-          <View style={{ flex: 1 }}>
+          <View style={styles.headerContent}>
             <Text style={styles.title}>Employee Details</Text>
             <Text style={styles.subtitle}>{employees.length} employees</Text>
           </View>
@@ -366,7 +387,7 @@ export default function EmployeeDetailsScreen() {
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <Text style={styles.modalTitle}>Employee Details</Text>
             {selectedEmployee && (
-              <View style={{ gap: 8 }}>
+              <View style={styles.detailList}>
                 {[
                   ['Name', selectedEmployee.name],
                   ['Role', selectedEmployee.role],
@@ -399,59 +420,190 @@ export default function EmployeeDetailsScreen() {
       >
         <Pressable style={styles.modalBackdrop} onPress={() => { setAddOpen(false); setEditOpen(false); }}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
-            <Text style={styles.modalTitle}>{editOpen ? 'Edit Employee' : 'Add Employee'}</Text>
-            {!editOpen && canAddHrAccount ? (
-              <View style={styles.typeToggleRow}>
-                <Pressable
-                  style={[
-                    styles.typeToggleButton,
-                    addUserType === 'employee' && styles.typeToggleButtonActive,
-                  ]}
-                  onPress={() => setAddUserType('employee')}
-                >
-                  <Text
-                    style={[
-                      styles.typeToggleText,
-                      addUserType === 'employee' && styles.typeToggleTextActive,
-                    ]}
-                  >
-                    Employee
-                  </Text>
+            <ScrollView style={styles.formScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={styles.modalTitle}>{editOpen ? 'Edit Employee' : 'Add Employee'}</Text>
+              <Text style={styles.modalSubtitle}>
+                {editOpen
+                  ? 'Update the employee profile and payroll details below.'
+                  : 'Fill in the employee identity, contact, and salary information.'}
+              </Text>
+
+              {!editOpen && canAddHrAccount ? (
+                <View style={styles.typeBlock}>
+                  <Text style={styles.sectionLabel}>Account Type</Text>
+                  <Text style={styles.sectionHint}>Choose whether you are creating an employee account or an HR account.</Text>
+                  <View style={styles.typeToggleRow}>
+                    <Pressable
+                      style={[
+                        styles.typeToggleButton,
+                        addUserType === 'employee' && styles.typeToggleButtonActive,
+                      ]}
+                      onPress={() => setAddUserType('employee')}
+                    >
+                      <Text
+                        style={[
+                          styles.typeToggleText,
+                          addUserType === 'employee' && styles.typeToggleTextActive,
+                        ]}
+                      >
+                        Employee
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={[
+                        styles.typeToggleButton,
+                        addUserType === 'hr' && styles.typeToggleButtonActive,
+                      ]}
+                      onPress={() => setAddUserType('hr')}
+                    >
+                      <Text
+                        style={[
+                          styles.typeToggleText,
+                          addUserType === 'hr' && styles.typeToggleTextActive,
+                        ]}
+                      >
+                        HR
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
+
+              {/* ── Basic Information ───────────────────────────── */}
+              <View style={styles.formSection}>
+                <Text style={styles.sectionLabel}>Basic Information</Text>
+
+                <View style={styles.fieldRow}>
+                  <View style={[styles.fieldGroup, styles.fieldHalf]}>
+                    <Text style={styles.fieldLabel}>First Name <Text style={styles.required}>*</Text></Text>
+                    <TextInput style={styles.input} value={form.firstName} onChangeText={t => onChangeField('firstName', t)}
+                      placeholder="e.g. Pratham" placeholderTextColor="#9ca3af" />
+                  </View>
+                  <View style={[styles.fieldGroup, styles.fieldHalf]}>
+                    <Text style={styles.fieldLabel}>Last Name <Text style={styles.required}>*</Text></Text>
+                    <TextInput style={styles.input} value={form.lastName} onChangeText={t => onChangeField('lastName', t)}
+                      placeholder="e.g. Barot" placeholderTextColor="#9ca3af" />
+                  </View>
+                </View>
+
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.fieldLabel}>Email Address <Text style={styles.required}>*</Text></Text>
+                  <TextInput style={styles.input} value={form.email} onChangeText={t => onChangeField('email', t)}
+                    placeholder="e.g. pratham@company.com" placeholderTextColor="#9ca3af"
+                    autoCapitalize="none" keyboardType="email-address" />
+                </View>
+
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.fieldLabel}>Date of Birth <Text style={styles.optional}>(optional)</Text></Text>
+                  <TextInput style={styles.input} value={form.dateOfBirth} onChangeText={t => onChangeField('dateOfBirth', t)}
+                    placeholder="YYYY-MM-DD" placeholderTextColor="#9ca3af" />
+                </View>
+
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.fieldLabel}>Designation <Text style={styles.required}>*</Text></Text>
+                  <TextInput style={styles.input} value={form.designation} onChangeText={t => onChangeField('designation', t)}
+                    placeholder="e.g. Software Engineer" placeholderTextColor="#9ca3af" />
+                </View>
+              </View>
+
+              {/* ── Address ─────────────────────────────────────── */}
+              {!editOpen && (
+                <View style={styles.formSection}>
+                  <Text style={styles.sectionLabel}>Address</Text>
+
+                  <View style={styles.fieldRow}>
+                    <View style={[styles.fieldGroup, styles.fieldHalf]}>
+                      <Text style={styles.fieldLabel}>City</Text>
+                      <TextInput style={styles.input} value={form.city} onChangeText={t => onChangeField('city', t)}
+                        placeholder="e.g. Mumbai" placeholderTextColor="#9ca3af" />
+                    </View>
+                    <View style={[styles.fieldGroup, styles.fieldHalf]}>
+                      <Text style={styles.fieldLabel}>State</Text>
+                      <TextInput style={styles.input} value={form.state} onChangeText={t => onChangeField('state', t)}
+                        placeholder="e.g. Maharashtra" placeholderTextColor="#9ca3af" />
+                    </View>
+                  </View>
+
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.fieldLabel}>Postal Code</Text>
+                    <TextInput style={styles.input} value={form.postalCode} onChangeText={t => onChangeField('postalCode', t)}
+                      placeholder="e.g. 400001" placeholderTextColor="#9ca3af" keyboardType="numeric" />
+                  </View>
+
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.fieldLabel}>Address Line 1</Text>
+                    <TextInput style={styles.input} value={form.addressLine1} onChangeText={t => onChangeField('addressLine1', t)}
+                      placeholder="e.g. 123 Main Street" placeholderTextColor="#9ca3af" />
+                  </View>
+
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.fieldLabel}>Address Line 2 <Text style={styles.optional}>(optional)</Text></Text>
+                    <TextInput style={styles.input} value={form.addressLine2} onChangeText={t => onChangeField('addressLine2', t)}
+                      placeholder="e.g. Apt 4B, Near City Mall" placeholderTextColor="#9ca3af" />
+                  </View>
+                </View>
+              )}
+
+              {/* ── Employment Details ───────────────────────────── */}
+              <View style={styles.formSection}>
+                <Text style={styles.sectionLabel}>Employment Details</Text>
+
+                <View style={styles.fieldRow}>
+                  <View style={[styles.fieldGroup, styles.fieldHalf]}>
+                    <Text style={styles.fieldLabel}>Salary (₹) <Text style={styles.required}>*</Text></Text>
+                    <TextInput style={styles.input} value={form.salary} onChangeText={t => onChangeField('salary', t)}
+                      placeholder="e.g. 50000" placeholderTextColor="#9ca3af" keyboardType="numeric" />
+                  </View>
+                  <View style={[styles.fieldGroup, styles.fieldHalf]}>
+                    <Text style={styles.fieldLabel}>Deduction (₹) <Text style={styles.required}>*</Text></Text>
+                    <TextInput style={styles.input} value={form.deduction} onChangeText={t => onChangeField('deduction', t)}
+                      placeholder="e.g. 2000" placeholderTextColor="#9ca3af" keyboardType="numeric" />
+                  </View>
+                </View>
+
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.fieldLabel}>Joining Date <Text style={styles.required}>*</Text></Text>
+                  <TextInput style={styles.input} value={form.joiningDate} onChangeText={t => onChangeField('joiningDate', t)}
+                    placeholder="YYYY-MM-DD" placeholderTextColor="#9ca3af" />
+                </View>
+
+                {!editOpen && (
+                  <View style={styles.fieldRow}>
+                    <View style={[styles.fieldGroup, styles.fieldHalf]}>
+                      <Text style={styles.fieldLabel}>Confirmation Status</Text>
+                      <View style={styles.toggleRow}>
+                        {['Pending', 'Confirmed'].map(s => (
+                          <Pressable key={s} onPress={() => onChangeField('confirmationStatus', s)}
+                            style={[styles.toggleBtn, form.confirmationStatus === s && styles.toggleBtnActive]}>
+                            <Text style={[styles.toggleBtnText, form.confirmationStatus === s && styles.toggleBtnTextActive]}>{s}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                    <View style={[styles.fieldGroup, styles.fieldHalf]}>
+                      <Text style={styles.fieldLabel}>Probation Status</Text>
+                      <View style={styles.toggleRow}>
+                        {['No', 'Yes'].map(s => (
+                          <Pressable key={s} onPress={() => onChangeField('probationStatus', s)}
+                            style={[styles.toggleBtn, form.probationStatus === s && styles.toggleBtnActive]}>
+                            <Text style={[styles.toggleBtnText, form.probationStatus === s && styles.toggleBtnTextActive]}>{s}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.addActionsRow}>
+                <Pressable onPress={() => { setAddOpen(false); setEditOpen(false); resetForm(); }} style={styles.secondaryBtn}>
+                  <Text style={styles.secondaryBtnText}>Cancel</Text>
                 </Pressable>
-                <Pressable
-                  style={[
-                    styles.typeToggleButton,
-                    addUserType === 'hr' && styles.typeToggleButtonActive,
-                  ]}
-                  onPress={() => setAddUserType('hr')}
-                >
-                  <Text
-                    style={[
-                      styles.typeToggleText,
-                      addUserType === 'hr' && styles.typeToggleTextActive,
-                    ]}
-                  >
-                    HR
-                  </Text>
+                <Pressable onPress={editOpen ? onSaveEdit : onAddEmployee} style={styles.primaryBtn}>
+                  <Text style={styles.primaryBtnText}>{editOpen ? 'Update' : 'Save'}</Text>
                 </Pressable>
               </View>
-            ) : null}
-            <View style={{ gap: 8 }}>
-              <TextInput style={styles.input} value={form.name} onChangeText={t => onChangeField('name', t)} placeholder="Employee name" />
-              <TextInput style={styles.input} value={form.role} onChangeText={t => onChangeField('role', t)} placeholder="Role" />
-              <TextInput style={styles.input} value={form.email} onChangeText={t => onChangeField('email', t)} placeholder="Email" autoCapitalize="none" keyboardType="email-address" />
-              <TextInput style={styles.input} value={form.salary} onChangeText={t => onChangeField('salary', t)} placeholder="Salary" keyboardType="numeric" />
-              <TextInput style={styles.input} value={form.deductions} onChangeText={t => onChangeField('deductions', t)} placeholder="Deduction" keyboardType="numeric" />
-              <TextInput style={styles.input} value={form.joiningDate} onChangeText={t => onChangeField('joiningDate', t)} placeholder="YYYY-MM-DD" />
-            </View>
-            <View style={styles.addActionsRow}>
-              <Pressable onPress={() => { setAddOpen(false); setEditOpen(false); resetForm(); }} style={styles.secondaryBtn}>
-                <Text style={styles.secondaryBtnText}>Cancel</Text>
-              </Pressable>
-              <Pressable onPress={editOpen ? onSaveEdit : onAddEmployee} style={styles.primaryBtn}>
-                <Text style={styles.primaryBtnText}>{editOpen ? 'Update' : 'Save'}</Text>
-              </Pressable>
-            </View>
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
@@ -464,8 +616,8 @@ export default function EmployeeDetailsScreen() {
             {activityRows.length === 0 ? (
               <Text style={styles.emptyActivity}>No records found.</Text>
             ) : (
-              <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
-                <View style={{ gap: 8 }}>
+              <ScrollView style={styles.activityScroll} showsVerticalScrollIndicator={false}>
+                <View style={styles.activityList}>
                   {activityRows.map(r => (
                     <View key={r.id} style={styles.activityRow}>
                       <Text style={styles.activityLine1}>{r.line1}</Text>
@@ -508,6 +660,7 @@ const styles = StyleSheet.create({
   /* Header */
   headerCard: { marginBottom: 12 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerContent: { flex: 1 },
   title: { fontSize: 18, fontWeight: '800', color: '#0f172a' },
   subtitle: { marginTop: 2, color: '#64748b', fontWeight: '600', fontSize: 12 },
   addButton: { backgroundColor: '#16a34a', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
@@ -563,6 +716,7 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: '#f1f5f9', marginVertical: 8 },
 
   cardRow: { flexDirection: 'row', alignItems: 'center' },
+  cardRowSpaced: { marginTop: 8 },
   cardCell: { flex: 1 },
   cellRight: { alignItems: 'flex-end' },
   cellLabel: { fontSize: 10, fontWeight: '700', color: '#94a3b8', marginBottom: 1 },
@@ -570,14 +724,55 @@ const styles = StyleSheet.create({
 
   /* Modals */
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.55)', padding: 18, justifyContent: 'center' },
-  modalCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e5e7eb' },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    maxHeight: '86%',
+  },
   modalTitle: { fontSize: 16, fontWeight: '900', color: '#0f172a', marginBottom: 10 },
+  modalSubtitle: { color: '#64748b', fontWeight: '600', fontSize: 12, marginBottom: 14, lineHeight: 18 },
+  formScroll: { flexGrow: 0 },
+  detailList: { gap: 8 },
+  activityScroll: { maxHeight: 320 },
+  activityList: { gap: 8 },
+  formSection: {
+    paddingTop: 4,
+    marginBottom: 14,
+  },
+  typeBlock: {
+    marginBottom: 14,
+  },
+  sectionLabel: { color: '#0f172a', fontWeight: '900', fontSize: 13, marginBottom: 3 },
+  sectionHint: { color: '#64748b', fontWeight: '600', fontSize: 11, marginBottom: 10, lineHeight: 16 },
+  fieldGroup: { marginBottom: 10 },
+  fieldRow: { flexDirection: 'row', gap: 10 },
+  fieldHalf: { flex: 1 },
+  fieldLabel: { color: '#334155', fontWeight: '800', fontSize: 12, marginBottom: 6 },
+  required: { color: '#CC0D49', fontWeight: '900' },
+  optional: { color: '#94a3b8', fontWeight: '600', fontSize: 11 },
+  toggleRow: { flexDirection: 'row', gap: 6 },
+  toggleBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#d1d5db', alignItems: 'center', backgroundColor: '#fff' },
+  toggleBtnActive: { backgroundColor: '#fce7ef', borderColor: '#CC0D49' },
+  toggleBtnText: { fontSize: 12, fontWeight: '700', color: '#475569' },
+  toggleBtnTextActive: { color: '#CC0D49', fontWeight: '800' },
   kvRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   k: { color: '#64748b', fontWeight: '800', flex: 1 },
   v: { color: '#0f172a', fontWeight: '700', flex: 1, textAlign: 'right' },
   closeBtn: { marginTop: 14, backgroundColor: '#e11d48', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   closeBtnText: { color: '#fff', fontWeight: '900' },
-  input: { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: '#111827', backgroundColor: '#ffffff' },
+  input: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: '#111827',
+    backgroundColor: '#ffffff',
+  },
   typeToggleRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   typeToggleButton: { flex: 1, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 10, paddingVertical: 8, alignItems: 'center' },
   typeToggleButtonActive: { backgroundColor: '#fce7ef', borderColor: '#CC0D49' },

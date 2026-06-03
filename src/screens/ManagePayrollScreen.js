@@ -75,8 +75,8 @@ function categoryLabel(category) {
 }
 
 export default function ManagePayrollScreen() {
-  const { payrolls } = useContext(AppStoreContext);
-  const { updatePayroll, deletePayroll, publishPayroll } = useContext(AppStoreActionsContext);
+  const { payrolls, employees } = useContext(AppStoreContext);
+  const { addPayroll, updatePayroll, deletePayroll, publishPayroll, refreshPayrolls } = useContext(AppStoreActionsContext);
 
   const [searchName, setSearchName] = useState('');
   const [selectedYear, setSelectedYear] = useState(null);
@@ -110,10 +110,23 @@ export default function ManagePayrollScreen() {
   const [breakdownHistory, setBreakdownHistory] = useState([]);
   const [typePickerOpen, setTypePickerOpen] = useState(false);
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
+  const [generateOpen, setGenerateOpen] = useState(false);
+  const [employeePickerOpen, setEmployeePickerOpen] = useState(false);
+  const [generateMode, setGenerateMode] = useState('single');
+  const [isGenerateSaving, setIsGenerateSaving] = useState(false);
   const [breakdownForm, setBreakdownForm] = useState({
     type: '',
     amount: '',
     category: 1,
+  });
+  const [generateForm, setGenerateForm] = useState({
+    employeeId: '',
+    payrollDate: '',
+    month: '',
+    paymentMode: 'NEFT',
+    basic: '',
+    allowance: '0',
+    deduction: '0',
   });
 
   const availableYears = useMemo(() => {
@@ -158,7 +171,126 @@ export default function ManagePayrollScreen() {
 
   const hasFilters = selectedYear || fromMonth || toMonth || searchName.trim();
   const breakdownMonthLabel = breakdownTarget ? formatMonthLabel(breakdownTarget.month) : '-';
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const thisMonthIso = todayIso.slice(0, 7);
+  const selectedGenerateEmployee = useMemo(
+    () => employees.find(e => String(e.id) === String(generateForm.employeeId)) || null,
+    [employees, generateForm.employeeId],
+  );
+
   const openActions = item => { setActiveItem(item); setActionsOpen(true); };
+
+  const openGenerateModal = mode => {
+    const selectedEmployee = employees.find(e => e.status === 'Active') || employees[0] || null;
+    const nextEmployeeId = mode === 'single' ? String(selectedEmployee?.id || '') : '';
+    setGenerateMode(mode);
+    setGenerateForm({
+      employeeId: nextEmployeeId,
+      payrollDate: todayIso,
+      month: thisMonthIso,
+      paymentMode: 'NEFT',
+      basic: mode === 'single' ? String(Number(selectedEmployee?.salary || 0)) : '',
+      allowance: '0',
+      deduction: mode === 'single' ? String(Number(selectedEmployee?.deduction || 0)) : '0',
+    });
+    setGenerateOpen(true);
+  };
+
+  const buildPayrollPayload = (employee, form) => ({
+    employeeId: String(employee.id),
+    payrollDate: String(form.payrollDate || todayIso).slice(0, 10),
+    month: String(form.month || thisMonthIso).slice(0, 7),
+    paymentMode: String(form.paymentMode || 'NEFT').trim() || 'NEFT',
+    basic: Number(form.basic || employee.salary || 0),
+    allowance: Number(form.allowance || 0),
+    deduction: Number(form.deduction || employee.deduction || 0),
+  });
+
+  const onGeneratePayroll = async () => {
+    if (isGenerateSaving) return;
+
+    const payrollDate = String(generateForm.payrollDate || '').trim();
+    const month = String(generateForm.month || '').trim();
+    const paymentMode = String(generateForm.paymentMode || '').trim();
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(payrollDate)) {
+      Alert.alert('Invalid date', 'Use payroll date format YYYY-MM-DD.');
+      return;
+    }
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      Alert.alert('Invalid month', 'Use pay month format YYYY-MM.');
+      return;
+    }
+    if (!paymentMode) {
+      Alert.alert('Missing payment mode', 'Payment mode is required.');
+      return;
+    }
+
+    setIsGenerateSaving(true);
+    try {
+      if (generateMode === 'single') {
+        const employee = employees.find(e => String(e.id) === String(generateForm.employeeId));
+        if (!employee) {
+          Alert.alert('Missing employee', 'Please select an employee.');
+          return;
+        }
+
+        const existing = payrolls.find(
+          p => String(p.employeeId) === String(employee.id) && getMonthKey(p.month, p.payrollDate) === month,
+        );
+        if (existing) {
+          Alert.alert('Already generated', 'This employee already has a payroll for the selected month.');
+          return;
+        }
+
+        await addPayroll(buildPayrollPayload(employee, generateForm));
+        Alert.alert('Generated', `Payroll created for ${employee.name}.`);
+      } else {
+        const activeEmployees = employees.filter(e => e.status !== 'Inactive');
+        let created = 0;
+        let skipped = 0;
+
+        for (const employee of activeEmployees) {
+          const exists = payrolls.find(
+            p => String(p.employeeId) === String(employee.id) && getMonthKey(p.month, p.payrollDate) === month,
+          );
+          if (exists) {
+            skipped += 1;
+            continue;
+          }
+          await hrApi.post('/payrolls', buildPayrollPayload(employee, {
+            payrollDate,
+            month,
+            paymentMode,
+            basic: employee.salary,
+            allowance: 0,
+            deduction: employee.deduction,
+          }));
+          created += 1;
+        }
+
+        await refreshPayrolls(employees);
+        Alert.alert(
+          'Generated',
+          `${created} payroll${created === 1 ? '' : 's'} created${skipped ? `, ${skipped} skipped because they already exist` : ''}.`,
+        );
+      }
+
+      setGenerateOpen(false);
+    } catch (error) {
+      Alert.alert(
+        'Could not generate payroll',
+        error?.response?.data?.error || error?.response?.data?.message || 'Please try again.',
+      );
+    } finally {
+      setIsGenerateSaving(false);
+    }
+  };
+
+  const openEmployeePicker = () => {
+    if (generateMode !== 'single') return;
+    setEmployeePickerOpen(true);
+  };
 
   const openEditModal = item => {
     if (!item) return;
@@ -632,7 +764,14 @@ export default function ManagePayrollScreen() {
               <Pressable
                 key={label}
                 style={styles.quickActionItem}
-                onPress={() => setQuickActionsOpen(false)}
+                onPress={() => {
+                  setQuickActionsOpen(false);
+                  if (label === 'Generate All Payrolls') {
+                    openGenerateModal('all');
+                    return;
+                  }
+                  openGenerateModal('single');
+                }}
               >
                 <View style={styles.quickActionIconWrap}>
                   <Text style={styles.quickActionIcon}>{icon}</Text>
@@ -640,6 +779,171 @@ export default function ManagePayrollScreen() {
                 <Text style={styles.quickActionText}>{label}</Text>
               </Pressable>
             ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Generate payroll modal */}
+      <Modal visible={generateOpen} transparent animationType="fade" onRequestClose={() => setGenerateOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => !isGenerateSaving && setGenerateOpen(false)}>
+          <Pressable style={styles.generateModal} onPress={() => {}}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={styles.actionsTitle}>
+                {generateMode === 'all' ? 'Generate All Payrolls' : 'Generate Payroll'}
+              </Text>
+              <Text style={styles.generateHint}>
+                {generateMode === 'all'
+                  ? 'Creates payrolls for all active employees who do not already have one for the selected month.'
+                  : 'Creates a payroll for one employee using the selected date and month.'}
+              </Text>
+
+              {generateMode === 'single' ? (
+                <>
+                  <Text style={styles.editLabel}>Employee</Text>
+                  <Pressable style={styles.selectField} onPress={openEmployeePicker}>
+                    <Text style={styles.selectFieldText} numberOfLines={1}>
+                      {selectedGenerateEmployee?.name || 'Select employee'}
+                    </Text>
+                    <Text style={styles.selectFieldIcon}>v</Text>
+                  </Pressable>
+                  {selectedGenerateEmployee ? (
+                    <Text style={styles.generateMeta}>
+                      {selectedGenerateEmployee.role} | {selectedGenerateEmployee.email || 'No email'}
+                    </Text>
+                  ) : null}
+                </>
+              ) : (
+                <View style={styles.generateSummaryBox}>
+                  <Text style={styles.generateSummaryTitle}>Bulk generation</Text>
+                  <Text style={styles.generateSummaryText}>
+                    Active employees will be processed one by one. Existing payrolls for the same month are skipped.
+                  </Text>
+                </View>
+              )}
+
+              <Text style={styles.editLabel}>Payroll Date (YYYY-MM-DD)</Text>
+              <TextInput
+                style={styles.editInput}
+                value={generateForm.payrollDate}
+                onChangeText={value => setGenerateForm(prev => ({ ...prev, payrollDate: value }))}
+                placeholder="2026-05-13"
+                placeholderTextColor="#94a3b8"
+                autoCapitalize="none"
+              />
+
+              <Text style={styles.editLabel}>Pay Month (YYYY-MM)</Text>
+              <TextInput
+                style={styles.editInput}
+                value={generateForm.month}
+                onChangeText={value => setGenerateForm(prev => ({ ...prev, month: value }))}
+                placeholder="2026-05"
+                placeholderTextColor="#94a3b8"
+                autoCapitalize="none"
+              />
+
+              <Text style={styles.editLabel}>Payment Mode</Text>
+              <TextInput
+                style={styles.editInput}
+                value={generateForm.paymentMode}
+                onChangeText={value => setGenerateForm(prev => ({ ...prev, paymentMode: value }))}
+                placeholder="Cash / NEFT / UPI"
+                placeholderTextColor="#94a3b8"
+              />
+
+              {generateMode === 'single' ? (
+                <>
+                  <View style={styles.editRow}>
+                    <View style={styles.editField}>
+                      <Text style={styles.editLabel}>Basic</Text>
+                      <TextInput
+                        style={styles.editInput}
+                        value={generateForm.basic}
+                        onChangeText={value => setGenerateForm(prev => ({ ...prev, basic: value }))}
+                        keyboardType="numeric"
+                        placeholderTextColor="#94a3b8"
+                      />
+                    </View>
+                    <View style={styles.editField}>
+                      <Text style={styles.editLabel}>Allowance</Text>
+                      <TextInput
+                        style={styles.editInput}
+                        value={generateForm.allowance}
+                        onChangeText={value => setGenerateForm(prev => ({ ...prev, allowance: value }))}
+                        keyboardType="numeric"
+                        placeholderTextColor="#94a3b8"
+                      />
+                    </View>
+                  </View>
+
+                  <Text style={styles.editLabel}>Deduction</Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={generateForm.deduction}
+                    onChangeText={value => setGenerateForm(prev => ({ ...prev, deduction: value }))}
+                    keyboardType="numeric"
+                    placeholderTextColor="#94a3b8"
+                  />
+                </>
+              ) : (
+                <Text style={styles.generateNote}>
+                  Base salary and deduction are taken from each employee record. Allowance is set to `0`.
+                </Text>
+              )}
+
+              <View style={styles.editActionRow}>
+                <Pressable
+                  style={[styles.editActionBtn, styles.editCancelBtn]}
+                  disabled={isGenerateSaving}
+                  onPress={() => setGenerateOpen(false)}
+                >
+                  <Text style={styles.editCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.editActionBtn, styles.editSaveBtn, isGenerateSaving && { opacity: 0.65 }]}
+                  disabled={isGenerateSaving}
+                  onPress={onGeneratePayroll}
+                >
+                  <Text style={styles.editSaveText}>
+                    {isGenerateSaving ? 'Generating...' : generateMode === 'all' ? 'Generate All' : 'Generate'}
+                  </Text>
+                </Pressable>
+              </View>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Employee picker modal */}
+      <Modal visible={employeePickerOpen} transparent animationType="fade" onRequestClose={() => setEmployeePickerOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setEmployeePickerOpen(false)}>
+          <Pressable style={styles.pickerModal} onPress={() => {}}>
+            <Text style={styles.pickerTitle}>Select Employee</Text>
+            <ScrollView style={styles.employeePickerScroll} showsVerticalScrollIndicator={false}>
+              {employees.map(employee => (
+                <Pressable
+                  key={employee.id}
+                  style={[
+                    styles.employeePickRow,
+                    String(generateForm.employeeId) === String(employee.id) && styles.employeePickRowActive,
+                  ]}
+                  onPress={() => {
+                    setGenerateForm(prev => ({
+                      ...prev,
+                      employeeId: String(employee.id),
+                      basic: String(Number(employee.salary || 0)),
+                      deduction: String(Number(employee.deduction || 0)),
+                    }));
+                    setEmployeePickerOpen(false);
+                  }}
+                >
+                  <View style={styles.employeePickContent}>
+                    <Text style={styles.employeePickName}>{employee.name}</Text>
+                    <Text style={styles.employeePickMeta}>{employee.role} | {employee.email || 'No email'}</Text>
+                  </View>
+                  <Text style={styles.employeePickBadge}>{employee.status}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1082,6 +1386,68 @@ const styles = StyleSheet.create({
 
   actionsModal: { backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e5e7eb' },
   actionsTitle: { fontSize: 14, fontWeight: '800', color: '#0f172a', marginBottom: 10 },
+  generateModal: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    maxHeight: '88%',
+  },
+  generateHint: { color: '#64748b', fontSize: 12, lineHeight: 17, marginBottom: 12 },
+  generateSummaryBox: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 12,
+    marginBottom: 10,
+  },
+  generateSummaryTitle: { fontSize: 12, fontWeight: '800', color: '#0f172a', marginBottom: 4 },
+  generateSummaryText: { fontSize: 12, color: '#475569', lineHeight: 17 },
+  generateMeta: { color: '#64748b', fontSize: 11, marginTop: 4, marginBottom: 8 },
+  generateNote: { color: '#64748b', fontSize: 11, lineHeight: 16, marginTop: 2, marginBottom: 4 },
+  selectField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    backgroundColor: '#f8fafc',
+    marginBottom: 4,
+  },
+  selectFieldText: { fontSize: 13, fontWeight: '700', color: '#0f172a', flex: 1 },
+  selectFieldIcon: { color: '#94a3b8', fontSize: 11, marginLeft: 8, fontWeight: '900' },
+  employeePickerScroll: { maxHeight: 360, marginTop: 2 },
+  employeePickContent: { flex: 1 },
+  employeePickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#fff',
+    marginBottom: 8,
+  },
+  employeePickRowActive: { backgroundColor: '#fce7ef', borderColor: THEME },
+  employeePickName: { color: '#0f172a', fontWeight: '800', fontSize: 13 },
+  employeePickMeta: { color: '#64748b', fontWeight: '600', fontSize: 11, marginTop: 2 },
+  employeePickBadge: {
+    color: THEME,
+    fontWeight: '800',
+    fontSize: 10,
+    backgroundColor: '#fce7ef',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
 
   quickActionItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', gap: 12 },
   quickActionIconWrap: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#fce7ef', alignItems: 'center', justifyContent: 'center' },

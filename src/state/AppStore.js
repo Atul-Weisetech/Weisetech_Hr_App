@@ -363,12 +363,16 @@ export function AppStoreProvider({ children }) {
   }, [loadNotifications]);
 
   const addHoliday = useCallback(async payload => {
-    await hrApi.post('/holidays', {
+    const body = {
       holiday_name: payload.name,
       holiday_date: payload.date,
-      description: payload.description || '',
-      created_by: payload.createdBy || 'HR Admin',
-    });
+    };
+
+    if (payload.description) {
+      body.description = payload.description;
+    }
+
+    await hrApi.post('/holidays', body);
     await loadHolidays();
   }, [loadHolidays]);
 

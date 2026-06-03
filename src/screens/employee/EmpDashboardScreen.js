@@ -123,7 +123,6 @@ export default function EmpDashboardScreen({ onNavigateTab }) {
     calendar,
   } = useMemo(() => {
     const myLeaves = leaveRequests.filter(r => String(r.employeeId) === myEmployeeId);
-    const myWfh = wfhRequests.filter(r => String(r.employeeId) === myEmployeeId);
     const myPayroll = payrolls.filter(p => String(p.employeeId) === myEmployeeId);
 
     const approved = myLeaves
@@ -154,12 +153,6 @@ export default function EmpDashboardScreen({ onNavigateTab }) {
       return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     });
 
-    const monthWfhApproved = myWfh.filter(r => {
-      if (r.status !== 'Approved') return false;
-      const d = new Date(r.from);
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-    });
-
     const leaveDaysThisMonth = monthApprovedLeaves.reduce(
       (sum, r) => sum + calculateDaysInclusive(r.from, r.to),
       0,
@@ -175,7 +168,7 @@ export default function EmpDashboardScreen({ onNavigateTab }) {
       leaveUsagePct: leavePct,
       calendar: getSimpleCalendar(),
     };
-  }, [leaveRequests, wfhRequests, payrolls, myEmployeeId]);
+  }, [leaveRequests, payrolls, myEmployeeId]);
 
   const { holidayDays, leaveDays, wfhDays } = useMemo(() => {
     const now = new Date();
@@ -485,8 +478,20 @@ export default function EmpDashboardScreen({ onNavigateTab }) {
                 isTrackingStarted && styles.timerCircleRunning,
               ]}
             >
-              <MaterialCommunityIcons name="clock-time-five" size={22} color="#9ca3af" />
-              <Text style={[styles.timerValue, isSmallScreen && styles.timerValueMobile]}>{sessionHoursText}</Text>
+              <MaterialCommunityIcons
+                name="clock-time-five"
+                size={isSmallScreen ? 18 : 22}
+                color="#9ca3af"
+                style={styles.timerIcon}
+              />
+              <Text
+                style={[styles.timerValue, isSmallScreen && styles.timerValueMobile]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.65}
+              >
+                {sessionHoursText}
+              </Text>
             </View>
             <Text style={[styles.timerNote, isSmallScreen && styles.timerNoteMobile]}>
               {isTrackingStarted ? 'Tracking in progress' : `Today total: ${todayTotalHoursText}`}
@@ -800,11 +805,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 14,
+    paddingHorizontal: 10,
+    overflow: 'hidden',
   },
-  timerCircleMobile: { width: 112, height: 112, borderRadius: 56, borderWidth: 6, marginBottom: 10 },
+  timerCircleMobile: {
+    width: 116,
+    height: 116,
+    borderRadius: 58,
+    borderWidth: 5,
+    marginBottom: 10,
+    paddingHorizontal: 8,
+  },
   timerCircleRunning: { borderColor: '#16a34a' },
-  timerValue: { fontSize: 34, fontWeight: '800', color: '#0f172a', marginTop: 4 },
-  timerValueMobile: { fontSize: 28 },
+  timerIcon: { marginBottom: 2 },
+  timerValue: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: '#0f172a',
+    marginTop: 2,
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+  },
+  timerValueMobile: { fontSize: 20, lineHeight: 24, marginTop: 0 },
   timerNote: { fontSize: 18, color: '#94a3b8', marginBottom: 12, textAlign: 'center' },
   timerNoteMobile: { fontSize: 14, marginBottom: 10 },
   startTrackBtn: {

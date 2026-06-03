@@ -8,7 +8,9 @@ import {
   Modal,
   TextInput,
   Alert,
+  Platform,
 } from 'react-native';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AuthContext } from '../../state/AuthContext';
 import { AppStoreContext, AppStoreActionsContext } from '../../state/AppStore';
@@ -32,14 +34,36 @@ const STATUS_STYLE = {
 };
 
 function calculateDaysInclusive(fromDate, toDate) {
-  const start = new Date(fromDate);
-  const end = new Date(toDate);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+  const start = parseDateInputValue(fromDate);
+  const end = parseDateInputValue(toDate);
+  if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
   return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86400000) + 1);
 }
- function formatDate(dataString){
-  return new Date(dataString).toISOString().split('T')[0];
- }
+function normalizeDateString(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return value.slice(0, 10);
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return toDateInputValue(value);
+  return String(value).slice(0, 10);
+}
+function toDateInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+function parseDateInputValue(value) {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const normalized = normalizeDateString(value);
+  if (!normalized || normalized.length < 10) return null;
+  const [year, month, day] = normalized.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  const date = new Date(year, month - 1, day);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+function formatDate(dataString) {
+  return normalizeDateString(dataString) || '-';
+}
  
 
 function formatStatusFromRaw(rawStatus, fallbackStatus) {
@@ -65,6 +89,7 @@ export default function EmpWfhScreen() {
 
   const [modalVisible, setModalVisible] = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
+  const [activeDateField, setActiveDateField] = useState(null);
   const [form, setForm] = useState({ from: '', to: '', reason: '' });
 
   const filteredWfh = useMemo(() => {
@@ -85,6 +110,7 @@ export default function EmpWfhScreen() {
         reason: form.reason.trim(),
       });
       setForm({ from: '', to: '', reason: '' });
+      setActiveDateField(null);
       setModalVisible(false);
     } catch (error) {
       Alert.alert(
@@ -92,6 +118,48 @@ export default function EmpWfhScreen() {
         error?.response?.data?.error || 'Please try again.',
       );
     }
+  };
+
+  const openDatePicker = field => {
+    const currentValue = parseDateInputValue(form[field]) || new Date();
+    const minimumDate = field === 'to' ? parseDateInputValue(form.from) || undefined : undefined;
+
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({
+        value: currentValue,
+        mode: 'date',
+        display: 'calendar',
+        minimumDate,
+        onChange: (event, selectedDate) => {
+          if (event?.type === 'dismissed' || !selectedDate) return;
+          const nextValue = toDateInputValue(selectedDate);
+          setForm(prev => {
+            if (field === 'from') {
+              const nextToDate = parseDateInputValue(prev.to);
+              const shouldSyncTo = !nextToDate || nextToDate < selectedDate;
+              return { ...prev, from: nextValue, to: shouldSyncTo ? nextValue : prev.to };
+            }
+            return { ...prev, to: nextValue };
+          });
+        },
+      });
+      return;
+    }
+
+    setActiveDateField(field);
+  };
+
+  const handleInlineDateChange = (field, selectedDate) => {
+    if (!selectedDate) return;
+    const nextValue = toDateInputValue(selectedDate);
+    setForm(prev => {
+      if (field === 'from') {
+        const nextToDate = parseDateInputValue(prev.to);
+        const shouldSyncTo = !nextToDate || nextToDate < selectedDate;
+        return { ...prev, from: nextValue, to: shouldSyncTo ? nextValue : prev.to };
+      }
+      return { ...prev, to: nextValue };
+    });
   };
 
   const handleCancelRequest = async requestId => {
@@ -231,23 +299,44 @@ export default function EmpWfhScreen() {
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Apply for WFH</Text>
 
-            <Text style={styles.fieldLabel}>From Date (YYYY-MM-DD)</Text>
-            <TextInput
-              style={styles.input}
-              value={form.from}
-              onChangeText={v => setForm(f => ({ ...f, from: v }))}
-              placeholder="2026-03-01"
-              placeholderTextColor="#9ca3af"
-            />
+            <Text style={styles.fieldLabel}>From Date</Text>
+            <TouchableOpacity style={styles.dateInput} onPress={() => openDatePicker('from')}>
+              <Text style={[styles.dateInputText, !form.from && styles.datePlaceholder]}>
+                {form.from || 'Select from date'}
+              </Text>
+              <MaterialCommunityIcons name="calendar-month-outline" size={20} color="#6b7280" />
+            </TouchableOpacity>
 
-            <Text style={styles.fieldLabel}>To Date (YYYY-MM-DD)</Text>
-            <TextInput
-              style={styles.input}
-              value={form.to}
-              onChangeText={v => setForm(f => ({ ...f, to: v }))}
-              placeholder="2026-03-03"
-              placeholderTextColor="#9ca3af"
-            />
+            <Text style={styles.fieldLabel}>To Date</Text>
+            <TouchableOpacity style={styles.dateInput} onPress={() => openDatePicker('to')}>
+              <Text style={[styles.dateInputText, !form.to && styles.datePlaceholder]}>
+                {form.to || 'Select to date'}
+              </Text>
+              <MaterialCommunityIcons name="calendar-month-outline" size={20} color="#6b7280" />
+            </TouchableOpacity>
+
+            {Platform.OS !== 'android' && activeDateField && (
+              <View style={styles.inlinePickerWrap}>
+                <DateTimePicker
+                  value={parseDateInputValue(form[activeDateField]) || new Date()}
+                  mode="date"
+                  display="calendar"
+                  minimumDate={
+                    activeDateField === 'to' ? parseDateInputValue(form.from) || undefined : undefined
+                  }
+                  onChange={(event, selectedDate) => {
+                    if (event?.type === 'dismissed') {
+                      setActiveDateField(null);
+                      return;
+                    }
+                    handleInlineDateChange(activeDateField, selectedDate);
+                  }}
+                />
+                <TouchableOpacity style={styles.pickerDoneBtn} onPress={() => setActiveDateField(null)}>
+                  <Text style={styles.pickerDoneText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             <Text style={styles.fieldLabel}>Reason</Text>
             <TextInput
@@ -261,7 +350,13 @@ export default function EmpWfhScreen() {
             />
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => {
+                  setActiveDateField(null);
+                  setModalVisible(false);
+                }}
+              >
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit}>
@@ -398,9 +493,40 @@ const styles = StyleSheet.create({
     color: '#111827',
     backgroundColor: '#f9fafb',
   },
+  dateInput: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    backgroundColor: '#f9fafb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  dateInputText: { fontSize: 15, color: '#111827', flex: 1 },
+  datePlaceholder: { color: '#9ca3af' },
   textArea: { height: 80, textAlignVertical: 'top' },
 
   modalActions: { flexDirection: 'row', gap: 12, marginTop: 24 },
+  inlinePickerWrap: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 16,
+    padding: 12,
+    backgroundColor: '#f8fafc',
+    gap: 10,
+  },
+  pickerDoneBtn: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#e11d48',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 14,
+  },
+  pickerDoneText: { color: '#ffffff', fontWeight: '700', fontSize: 13 },
   cancelBtn: {
     flex: 1,
     borderWidth: 1.5,
