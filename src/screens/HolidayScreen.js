@@ -158,7 +158,12 @@ export default function HolidayScreen() {
       resetForm();
       setAddOpen(false);
     } catch (e) {
-      Alert.alert('Could not add holiday', e?.response?.data?.error || 'Please try again.');
+      const backendMessage =
+        e?.response?.data?.error ||
+        e?.response?.data?.message ||
+        e?.message ||
+        'Please try again.';
+      Alert.alert('Could not add holiday', backendMessage);
     } finally {
       setSaving(false);
     }
@@ -177,7 +182,12 @@ export default function HolidayScreen() {
             try {
               await deleteHoliday(item.id);
             } catch (e) {
-              Alert.alert('Could not delete', e?.response?.data?.error || 'Please try again.');
+              const backendMessage =
+                e?.response?.data?.error ||
+                e?.response?.data?.message ||
+                e?.message ||
+                'Please try again.';
+              Alert.alert('Could not delete', backendMessage);
             }
           },
         },
@@ -278,7 +288,7 @@ export default function HolidayScreen() {
           style={styles.modalBackdrop}
           onPress={() => { setAddOpen(false); resetForm(); }}
         >
-          <Pressable style={styles.modalCard} onPress={() => {}}>
+          <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Add Holiday</Text>
 
             <Text style={styles.formLabel}>Holiday Name *</Text>
@@ -326,7 +336,7 @@ export default function HolidayScreen() {
                 <Text style={styles.saveBtnText}>{saving ? 'Saving...' : 'Save'}</Text>
               </Pressable>
             </View>
-          </Pressable>
+          </View>
         </Pressable>
       </Modal>
     </Screen>

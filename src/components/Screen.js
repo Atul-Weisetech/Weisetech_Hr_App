@@ -1,16 +1,9 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
+import { sharedStyles } from '../styles/theme';
 
 function Screen({ children, style }) {
-  return <View style={[styles.root, style]}>{children}</View>;
+  return <View style={[sharedStyles.screen, style]}>{children}</View>;
 }
 
 export default React.memo(Screen);
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#f3f4f6',
-    padding: 16,
-  },
-});

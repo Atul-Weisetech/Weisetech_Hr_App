@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
@@ -7,13 +7,14 @@ import { AuthContext } from '../state/AuthContext';
 import LoginScreen from '../screens/LoginScreen';
 import AppDrawer from './AppDrawer';
 import EmployeeStack from './EmployeeStack';
+import { colors, sharedStyles } from '../styles/theme';
 
 const Stack = createNativeStackNavigator();
 
 function SplashScreen() {
   return (
-    <View style={styles.splash}>
-      <ActivityIndicator size="large" color="#CC0D49" />
+    <View style={sharedStyles.splash}>
+      <ActivityIndicator size="large" color={colors.primary} />
     </View>
   );
 }
@@ -40,12 +41,3 @@ export default function RootNavigator() {
     </NavigationContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  splash: {
-    flex: 1,
-    backgroundColor: '#f3f4f6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

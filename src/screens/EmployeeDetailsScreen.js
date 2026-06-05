@@ -144,18 +144,18 @@ export default function EmployeeDetailsScreen() {
       return;
     }
 
+    // The employee API stores contact data in `email_address`.
     const primaryPayload = {
       first_name: firstName,
       last_name: lastName,
       email_address: trimmedEmail,
-      email: trimmedEmail,
       designation: form.designation.trim() || 'Employee',
       date_of_birth: form.dateOfBirth.trim() || null,
       city: form.city.trim() || null,
       state: form.state.trim() || null,
       postal_code: form.postalCode.trim() || null,
-      address_line1: form.addressLine1.trim() || null,
-      address_line2: form.addressLine2.trim() || null,
+      address_line_1: form.addressLine1.trim() || null,
+      address_line_2: form.addressLine2.trim() || null,
       salary: Number(form.salary || 0),
       deduction: Number(form.deduction || 0),
       joining_date: form.joiningDate.trim() || null,
@@ -190,10 +190,7 @@ export default function EmployeeDetailsScreen() {
         error?.response?.data?.error ||
         error?.response?.data?.message ||
         (error?.message ? String(error.message) : 'Please check input and try again.');
-      Alert.alert(
-        'Could not add employee',
-        `${backendMessage}\nAPI: ${hrApi.defaults.baseURL}`,
-      );
+      Alert.alert('Could not add employee', backendMessage);
     }
   };
 

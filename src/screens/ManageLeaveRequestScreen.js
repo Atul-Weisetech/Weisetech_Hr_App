@@ -10,8 +10,7 @@ import {
 import Screen from '../components/Screen';
 import Card from '../components/Card';
 import { AppStoreContext, AppStoreActionsContext } from '../state/AppStore';
-
-const THEME = '#CC0D49';
+import { colors, sharedStyles } from '../styles/theme';
 
 const FILTER_TABS = [
   { label: 'All',             value: 'all' },
@@ -138,13 +137,13 @@ export default function ManageLeaveRequestScreen() {
   return (
     <Screen>
       {/* Header */}
-      <Card style={styles.headerCard}>
-        <Text style={styles.title}>Manage Leave Requests</Text>
-        <Text style={styles.subtitle}>{filtered.length} of {leaveRequests.length} requests</Text>
+      <Card style={sharedStyles.listHeaderCard}>
+        <Text style={sharedStyles.pageTitle}>Manage Leave Requests</Text>
+        <Text style={sharedStyles.pageSubtitle}>{filtered.length} of {leaveRequests.length} requests</Text>
 
         {/* Search */}
         <TextInput
-          style={styles.searchInput}
+          style={sharedStyles.searchInput}
           value={search}
           onChangeText={setSearch}
           placeholder="Search by employee name..."
@@ -153,13 +152,13 @@ export default function ManageLeaveRequestScreen() {
       </Card>
 
       {/* Filter tabs */}
-      <View style={styles.tabsWrap}>
+      <View style={sharedStyles.tabsWrap}>
         <FlatList
           data={FILTER_TABS}
           keyExtractor={t => t.value}
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabsContent}
+          contentContainerStyle={sharedStyles.tabsContent}
           renderItem={({ item: tab }) => {
             const active = activeFilter === tab.value;
             return (
@@ -182,11 +181,11 @@ export default function ManageLeaveRequestScreen() {
         data={filtered}
         keyExtractor={item => item.id}
         renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={sharedStyles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.emptyWrap}>
-            <Text style={styles.emptyText}>No leave requests found.</Text>
+          <View style={sharedStyles.emptyWrap}>
+            <Text style={sharedStyles.emptyText}>No leave requests found.</Text>
           </View>
         }
       />
@@ -195,24 +194,7 @@ export default function ManageLeaveRequestScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerCard: { marginBottom: 10, gap: 8 },
-  title: { fontSize: 18, fontWeight: '900', color: '#0f172a' },
-  subtitle: { fontSize: 12, fontWeight: '600', color: '#94a3b8', marginTop: -4 },
-  searchInput: {
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 13,
-    color: '#0f172a',
-    backgroundColor: '#f8fafc',
-    marginTop: 4,
-  },
-
   /* Filter tabs */
-  tabsWrap: { marginBottom: 10 },
-  tabsContent: { gap: 8, paddingRight: 4 },
   tab: {
     paddingHorizontal: 14,
     paddingVertical: 7,
@@ -221,14 +203,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
-  tabActive: { backgroundColor: THEME, borderColor: THEME },
+  tabActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   tabText: { fontSize: 12, fontWeight: '700', color: '#475569' },
   tabTextActive: { color: '#fff' },
-
-  /* List */
-  listContent: { paddingBottom: 20 },
-  emptyWrap: { alignItems: 'center', paddingVertical: 40 },
-  emptyText: { color: '#94a3b8', fontWeight: '600' },
 
   /* Card */
   card: {
@@ -253,7 +230,7 @@ const styles = StyleSheet.create({
   /* Row 1 */
   row: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   empName: { fontSize: 14, fontWeight: '800', color: '#0f172a', flex: 1, marginRight: 8 },
-  dateRange: { fontSize: 12, fontWeight: '700', color: THEME },
+  dateRange: { fontSize: 12, fontWeight: '700', color: colors.primary },
 
   divider: { height: 1, backgroundColor: '#f1f5f9', marginVertical: 10 },
 

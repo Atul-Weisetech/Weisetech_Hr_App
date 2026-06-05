@@ -366,6 +366,7 @@ export function AppStoreProvider({ children }) {
     const body = {
       holiday_name: payload.name,
       holiday_date: payload.date,
+      created_by: payload.created_by || payload.createdBy || 'HR Admin',
     };
 
     if (payload.description) {
@@ -373,7 +374,13 @@ export function AppStoreProvider({ children }) {
     }
 
     await hrApi.post('/holidays', body);
-    await loadHolidays();
+
+    // Refresh is best-effort so a temporary list fetch issue does not hide a successful save.
+    try {
+      await loadHolidays();
+    } catch (refreshErr) {
+      console.warn('Holiday refresh failed after save', refreshErr?.message);
+    }
   }, [loadHolidays]);
 
   const deleteHoliday = useCallback(async id => {
