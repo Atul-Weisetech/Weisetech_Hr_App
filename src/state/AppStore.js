@@ -150,6 +150,7 @@ export function AppStoreProvider({ children }) {
   const { user } = useContext(AuthContext);
 
   const [employees, setEmployees] = useState([]);
+  const [hrEmployeeIds, setHrEmployeeIds] = useState(new Set());
   const [payrolls, setPayrolls] = useState([]);
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [wfhRequests, setWfhRequests] = useState([]);
@@ -164,6 +165,23 @@ export function AppStoreProvider({ children }) {
     const rows = Array.isArray(data) ? data : [];
     const normalized = rows.map(normalizeEmployee);
     setEmployees(normalized);
+
+    // Identify HR user employee IDs (employees excluded from the default list)
+    // Used for role-based filtering in management screens.
+    try {
+      const { data: allData } = await hrApi.get('/employees?includeHR=true');
+      const allRows = Array.isArray(allData) ? allData : [];
+      const empIdSet = new Set(normalized.map(e => e.id));
+      const hrIds = new Set(
+        allRows
+          .map(e => String(e.employee_id ?? e.id ?? ''))
+          .filter(id => id && !empIdSet.has(id)),
+      );
+      setHrEmployeeIds(hrIds);
+    } catch {
+      // non-critical — leave hrEmployeeIds as empty set
+    }
+
     return normalized;
   }, []);
 
@@ -413,6 +431,7 @@ export function AppStoreProvider({ children }) {
   // ── DATA context value — changes when data changes ─────────────────────────
   const dataValue = useMemo(() => ({
     employees,
+    hrEmployeeIds,
     payrolls,
     leaveRequests,
     wfhRequests,
@@ -420,7 +439,7 @@ export function AppStoreProvider({ children }) {
     notificationsByEmployee,
     holidays,
     timeEntries,
-  }), [employees, payrolls, leaveRequests, wfhRequests, warnings, notificationsByEmployee, holidays, timeEntries]);
+  }), [employees, hrEmployeeIds, payrolls, leaveRequests, wfhRequests, warnings, notificationsByEmployee, holidays, timeEntries]);
 
   // ── ACTIONS context value — stable, changes only when loaders change ────────
   const actionsValue = useMemo(() => ({

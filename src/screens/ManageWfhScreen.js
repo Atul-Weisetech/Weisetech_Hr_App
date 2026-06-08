@@ -10,6 +10,7 @@ import {
 import Screen from '../components/Screen';
 import Card from '../components/Card';
 import { AppStoreContext, AppStoreActionsContext } from '../state/AppStore';
+import { AuthContext } from '../state/AuthContext';
 
 const THEME = '#CC0D49';
 
@@ -103,20 +104,29 @@ const WfhCard = React.memo(({ item, onApprove, onReject }) => {
 });
 
 export default function ManageWfhScreen() {
-  const { wfhRequests } = useContext(AppStoreContext);
+  const { user } = useContext(AuthContext);
+  const { wfhRequests, hrEmployeeIds } = useContext(AppStoreContext);
   const { updateWfhStatus } = useContext(AppStoreActionsContext);
 
   const [activeFilter, setActiveFilter] = useState('all');
   const [search, setSearch] = useState('');
 
+  // HR users cannot see WFH requests submitted by other HR users
+  const visibleRequests = useMemo(() => {
+    if (user?.role === 'hr') {
+      return wfhRequests.filter(r => !hrEmployeeIds.has(r.employeeId));
+    }
+    return wfhRequests;
+  }, [wfhRequests, hrEmployeeIds, user?.role]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return wfhRequests.filter(r => {
+    return visibleRequests.filter(r => {
       if (activeFilter !== 'all' && r.rawStatus !== activeFilter) return false;
       if (q && !(r.employeeName || '').toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [wfhRequests, activeFilter, search]);
+  }, [visibleRequests, activeFilter, search]);
 
   const onApprove = useCallback(id => updateWfhStatus(id, 'Approved'), [updateWfhStatus]);
   const onReject  = useCallback(id => updateWfhStatus(id, 'Rejected'), [updateWfhStatus]);
@@ -127,19 +137,19 @@ export default function ManageWfhScreen() {
   );
 
   const counts = useMemo(() => {
-    const c = { all: wfhRequests.length };
+    const c = { all: visibleRequests.length };
     FILTER_TABS.slice(1).forEach(t => {
-      c[t.value] = wfhRequests.filter(r => r.rawStatus === t.value).length;
+      c[t.value] = visibleRequests.filter(r => r.rawStatus === t.value).length;
     });
     return c;
-  }, [wfhRequests]);
+  }, [visibleRequests]);
 
   return (
     <Screen>
       {/* Header */}
       <Card style={styles.headerCard}>
         <Text style={styles.title}>Manage WFH Requests</Text>
-        <Text style={styles.subtitle}>{filtered.length} of {wfhRequests.length} requests</Text>
+        <Text style={styles.subtitle}>{filtered.length} of {visibleRequests.length} requests</Text>
 
         <TextInput
           style={styles.searchInput}

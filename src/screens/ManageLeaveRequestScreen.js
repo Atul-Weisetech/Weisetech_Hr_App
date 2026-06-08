@@ -10,6 +10,7 @@ import {
 import Screen from '../components/Screen';
 import Card from '../components/Card';
 import { AppStoreContext, AppStoreActionsContext } from '../state/AppStore';
+import { AuthContext } from '../state/AuthContext';
 import { colors, sharedStyles } from '../styles/theme';
 
 const FILTER_TABS = [
@@ -102,20 +103,29 @@ const LeaveCard = React.memo(({ item, onApprove, onReject }) => {
 });
 
 export default function ManageLeaveRequestScreen() {
-  const { leaveRequests } = useContext(AppStoreContext);
+  const { user } = useContext(AuthContext);
+  const { leaveRequests, hrEmployeeIds } = useContext(AppStoreContext);
   const { updateLeaveStatus } = useContext(AppStoreActionsContext);
 
   const [activeFilter, setActiveFilter] = useState('all');
   const [search, setSearch] = useState('');
 
+  // HR users cannot see leave requests submitted by other HR users
+  const visibleRequests = useMemo(() => {
+    if (user?.role === 'hr') {
+      return leaveRequests.filter(r => !hrEmployeeIds.has(r.employeeId));
+    }
+    return leaveRequests;
+  }, [leaveRequests, hrEmployeeIds, user?.role]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return leaveRequests.filter(r => {
+    return visibleRequests.filter(r => {
       if (activeFilter !== 'all' && r.rawStatus !== activeFilter) return false;
       if (q && !(r.employeeName || '').toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [leaveRequests, activeFilter, search]);
+  }, [visibleRequests, activeFilter, search]);
 
   const onApprove = useCallback(id => updateLeaveStatus(id, 'Approved'), [updateLeaveStatus]);
   const onReject  = useCallback(id => updateLeaveStatus(id, 'Rejected'), [updateLeaveStatus]);
@@ -127,19 +137,19 @@ export default function ManageLeaveRequestScreen() {
 
   // Count per filter tab
   const counts = useMemo(() => {
-    const c = { all: leaveRequests.length };
+    const c = { all: visibleRequests.length };
     FILTER_TABS.slice(1).forEach(t => {
-      c[t.value] = leaveRequests.filter(r => r.rawStatus === t.value).length;
+      c[t.value] = visibleRequests.filter(r => r.rawStatus === t.value).length;
     });
     return c;
-  }, [leaveRequests]);
+  }, [visibleRequests]);
 
   return (
     <Screen>
       {/* Header */}
       <Card style={sharedStyles.listHeaderCard}>
         <Text style={sharedStyles.pageTitle}>Manage Leave Requests</Text>
-        <Text style={sharedStyles.pageSubtitle}>{filtered.length} of {leaveRequests.length} requests</Text>
+        <Text style={sharedStyles.pageSubtitle}>{filtered.length} of {visibleRequests.length} requests</Text>
 
         {/* Search */}
         <TextInput

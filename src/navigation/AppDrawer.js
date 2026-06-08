@@ -7,6 +7,7 @@ import {
 import { TouchableOpacity, Text, View, Alert } from 'react-native';
 import { AuthContext } from '../state/AuthContext';
 
+import EmployeeStack from './EmployeeStack';
 import EmployeeDetailsScreen from '../screens/EmployeeDetailsScreen';
 import ManagePayrollScreen from '../screens/ManagePayrollScreen';
 import ManageLeaveRequestScreen from '../screens/ManageLeaveRequestScreen';
@@ -126,6 +127,11 @@ export default function AppDrawer() {
         ),
       })}
     >
+      <Drawer.Screen
+        name="MyDashboard"
+        component={EmployeeStack}
+        options={{ drawerLabel: 'My Dashboard', headerShown: false }}
+      />
       <Drawer.Screen
         name="EmployeeDetails"
         component={EmployeeDetailsScreen}

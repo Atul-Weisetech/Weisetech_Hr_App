@@ -13,12 +13,17 @@ import Screen from '../components/Screen';
 import Card from '../components/Card';
 import PrimaryButton from '../components/PrimaryButton';
 import { AppStoreContext, AppStoreActionsContext } from '../state/AppStore';
+import { AuthContext } from '../state/AuthContext';
+import hrApi from '../api/hrApi';
 
 const DEFAULT_WARNING_TYPES = ['Low', 'Medium', 'High'];
 
 export default function PerformanceWarningScreen() {
-  const { warnings, employees } = useContext(AppStoreContext);
+  const { user } = useContext(AuthContext);
+  const { warnings, employees, hrEmployeeIds } = useContext(AppStoreContext);
   const { addWarning } = useContext(AppStoreActionsContext);
+
+  const isAdmin = user?.role === 'admin';
 
   const [showWarningForm, setShowWarningForm] = useState(false);
   const [employeeId, setEmployeeId] = useState(null);
@@ -28,17 +33,42 @@ export default function PerformanceWarningScreen() {
   const [severity, setSeverity] = useState('Medium');
   const [warningTypes, setWarningTypes] = useState(DEFAULT_WARNING_TYPES);
   const [newWarningType, setNewWarningType] = useState('');
+  const [hrEmployees, setHrEmployees] = useState([]);
+
+  // Admin can issue warnings to HR employees too — load them on mount
+  useEffect(() => {
+    if (!isAdmin) return;
+    hrApi.get('/employees?includeHR=true').then(({ data }) => {
+      const rows = Array.isArray(data) ? data : [];
+      const hrEmps = rows
+        .filter(e => hrEmployeeIds.has(String(e.employee_id ?? e.id ?? '')))
+        .map(e => {
+          const id = String(e.employee_id ?? e.id ?? '');
+          return {
+            id,
+            name: `${e.first_name || ''} ${e.last_name || ''}`.trim() || e.email_address || `Employee ${id}`,
+          };
+        });
+      setHrEmployees(hrEmps);
+    }).catch(() => {});
+  }, [isAdmin, hrEmployeeIds]);
+
+  // Admin sees all employees (regular + HR); HR sees only regular employees
+  const targetEmployees = useMemo(
+    () => (isAdmin ? [...employees, ...hrEmployees] : employees),
+    [isAdmin, employees, hrEmployees],
+  );
 
   const selectedEmployee = useMemo(() => {
-    if (!employees.length) return null;
-    return employees.find(e => e.id === employeeId) || employees[0];
-  }, [employeeId, employees]);
+    if (!targetEmployees.length) return null;
+    return targetEmployees.find(e => e.id === employeeId) || targetEmployees[0];
+  }, [employeeId, targetEmployees]);
 
   useEffect(() => {
-    if (!employeeId && employees.length) {
-      setEmployeeId(employees[0].id);
+    if (!employeeId && targetEmployees.length) {
+      setEmployeeId(targetEmployees[0].id);
     }
-  }, [employeeId, employees]);
+  }, [employeeId, targetEmployees]);
 
   useEffect(() => {
     if (severity && !reason.trim()) {
@@ -152,7 +182,7 @@ export default function PerformanceWarningScreen() {
         onRequestClose={() => setShowWarningForm(false)}
       >
         <Pressable style={styles.modalBackdrop} onPress={() => setShowWarningForm(false)}>
-          <Pressable style={styles.formModalCard} onPress={() => {}}>
+          <View style={styles.formModalCard}>
             <View style={styles.formModalHeader}>
               <Text style={styles.formModalTitle}>Issue Warning</Text>
               <Pressable
@@ -251,7 +281,7 @@ export default function PerformanceWarningScreen() {
                 <PrimaryButton title="Issue Warning" onPress={onIssue} />
               </View>
             </ScrollView>
-          </Pressable>
+          </View>
         </Pressable>
       </Modal>
 
@@ -262,7 +292,7 @@ export default function PerformanceWarningScreen() {
         onRequestClose={() => setPickerOpen(false)}
       >
         <Pressable style={styles.modalBackdrop} onPress={() => setPickerOpen(false)}>
-          <Pressable style={styles.modalCard} onPress={() => {}}>
+          <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Select Employee</Text>
             <ScrollView
               style={styles.pickerListScroll}
@@ -270,7 +300,7 @@ export default function PerformanceWarningScreen() {
               nestedScrollEnabled
               keyboardShouldPersistTaps="handled"
             >
-              {employees.map(e => (
+              {targetEmployees.map(e => (
                 <Pressable
                   key={e.id}
                   onPress={() => {
@@ -287,7 +317,7 @@ export default function PerformanceWarningScreen() {
                 </Pressable>
               ))}
             </ScrollView>
-          </Pressable>
+          </View>
         </Pressable>
       </Modal>
     </Screen>
