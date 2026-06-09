@@ -217,6 +217,54 @@ export const sharedStyles = StyleSheet.create({
     color: '#94a3b8',
     fontWeight: '600',
   },
+
+  /* Bottom tab bar — used by HRDashboardScreen (and EmployeeStack) */
+  bottomTabContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  bottomTabScreenContainer: {
+    flex: 1,
+  },
+  bottomTabBar: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingBottom: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.07,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: -3 },
+    elevation: 10,
+  },
+  bottomTabItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    position: 'relative',
+  },
+  bottomTabIndicator: {
+    position: 'absolute',
+    top: 0,
+    left: '25%',
+    right: '25%',
+    height: 3,
+    backgroundColor: colors.primary,
+    borderRadius: 2,
+  },
+  bottomTabIcon: {
+    marginTop: 2,
+  },
+  bottomTabLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#9ca3af',
+    marginTop: 3,
+  },
+  bottomTabLabelActive: {
+    color: colors.primary,
+  },
 });
 
 export default {

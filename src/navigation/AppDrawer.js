@@ -7,7 +7,7 @@ import {
 import { TouchableOpacity, Text, View, Alert } from 'react-native';
 import { AuthContext } from '../state/AuthContext';
 
-import EmployeeStack from './EmployeeStack';
+import HRDashboardScreen from '../screens/HRDashboardScreen';
 import EmployeeDetailsScreen from '../screens/EmployeeDetailsScreen';
 import ManagePayrollScreen from '../screens/ManagePayrollScreen';
 import ManageLeaveRequestScreen from '../screens/ManageLeaveRequestScreen';
@@ -129,8 +129,11 @@ export default function AppDrawer() {
     >
       <Drawer.Screen
         name="MyDashboard"
-        component={EmployeeStack}
-        options={{ drawerLabel: 'My Dashboard', headerShown: false }}
+        component={HRDashboardScreen}
+        options={{
+          drawerLabel: 'My Dashboard',
+          drawerItemStyle: user?.role === 'hr' ? undefined : { display: 'none' },
+        }}
       />
       <Drawer.Screen
         name="EmployeeDetails"

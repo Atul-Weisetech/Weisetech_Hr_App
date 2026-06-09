@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -38,6 +38,29 @@ function getGreetingByHour() {
   return 'Good Night';
 }
 
+function getLeaveColor(usagePct) {
+  if (usagePct >= 75) return '#ef4444';
+  if (usagePct >= 50) return '#f97316';
+  return '#22c55e';
+}
+
+function buildLeaveRingSegments({ usedDays, pendingDays, remainingDays }, segmentCount = 72) {
+  const safeUsed = Math.max(0, usedDays || 0);
+  const safePending = Math.max(0, pendingDays || 0);
+  const safeRemaining = Math.max(0, remainingDays || 0);
+  const totalDays = Math.max(1, safeUsed + safePending + safeRemaining);
+
+  const usedSegments = Math.round((safeUsed / totalDays) * segmentCount);
+  const pendingSegments = Math.round((safePending / totalDays) * segmentCount);
+  const remainingSegments = Math.max(0, segmentCount - usedSegments - pendingSegments);
+
+  return [
+    ...Array.from({ length: usedSegments }, () => ({ color: '#ef4444' })),
+    ...Array.from({ length: pendingSegments }, () => ({ color: '#f97316' })),
+    ...Array.from({ length: remainingSegments }, () => ({ color: '#22c55e' })),
+  ];
+}
+
 function formatMoney(value) {
   return `\u20B9${Number(value || 0).toLocaleString('en-IN')}`;
 }
@@ -48,19 +71,18 @@ function monthName(dateInput) {
   return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 }
 
-function getSimpleCalendar() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
+function getSimpleCalendar(year, month) {
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const now = new Date();
+  const isCurrentMonth = now.getFullYear() === year && now.getMonth() === month;
 
   const cells = [];
   for (let i = 0; i < firstDay; i += 1) cells.push(null);
   for (let d = 1; d <= daysInMonth; d += 1) cells.push(d);
   return {
-    monthLabel: now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-    today: now.getDate(),
+    monthLabel: new Date(year, month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+    today: isCurrentMonth ? now.getDate() : -1,
     cells,
   };
 }
@@ -72,6 +94,19 @@ export default function EmpDashboardScreen({ onNavigateTab }) {
   const [trackerVisible, setTrackerVisible] = useState(false);
   const [trackerForm, setTrackerForm] = useState(persistedTrackerDraft);
   const [isTrackingStarted, setIsTrackingStarted] = useState(false);
+
+  const todayObj = new Date();
+  const [calYear, setCalYear] = useState(todayObj.getFullYear());
+  const [calMonth, setCalMonth] = useState(todayObj.getMonth());
+
+  const onPrevMonth = () => {
+    if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11); }
+    else { setCalMonth(m => m - 1); }
+  };
+  const onNextMonth = () => {
+    if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0); }
+    else { setCalMonth(m => m + 1); }
+  };
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const trackingStartRef = useRef(null); // exact Date when tracking started
   const intervalRef = useRef(null);      // setInterval id
@@ -166,17 +201,13 @@ export default function EmpDashboardScreen({ onNavigateTab }) {
       pendingLeaveDays: pending,
       leaveBalance: balance,      recentPayrolls: recent,      thisMonthCompleted: completedDays,
       leaveUsagePct: leavePct,
-      calendar: getSimpleCalendar(),
+      calendar: getSimpleCalendar(calYear, calMonth),
     };
-  }, [leaveRequests, payrolls, myEmployeeId]);
+  }, [leaveRequests, payrolls, myEmployeeId, calYear, calMonth]);
 
   const { holidayDays, leaveDays, wfhDays } = useMemo(() => {
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-    const monthPrefix = `${currentYear}-${String(currentMonth).padStart(2, '0')}-`;
-
-    const toKey = dateObj => `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+    const monthPrefix = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-`;
+    const toKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
     const holidaySet = new Set(
       holidays
@@ -192,7 +223,7 @@ export default function EmpDashboardScreen({ onNavigateTab }) {
         const end = new Date(r.to);
         if (Number.isNaN(d.getTime()) || Number.isNaN(end.getTime())) return;
         while (d <= end) {
-          if ((d.getMonth() + 1) === currentMonth && d.getFullYear() === currentYear) leaveSet.add(toKey(d));
+          if (d.getMonth() === calMonth && d.getFullYear() === calYear) leaveSet.add(toKey(d));
           d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
         }
       });
@@ -205,16 +236,27 @@ export default function EmpDashboardScreen({ onNavigateTab }) {
         const end = new Date(r.to);
         if (Number.isNaN(d.getTime()) || Number.isNaN(end.getTime())) return;
         while (d <= end) {
-          if ((d.getMonth() + 1) === currentMonth && d.getFullYear() === currentYear) wfhSet.add(toKey(d));
+          if (d.getMonth() === calMonth && d.getFullYear() === calYear) wfhSet.add(toKey(d));
           d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
         }
       });
 
     return { holidayDays: holidaySet, leaveDays: leaveSet, wfhDays: wfhSet };
-  }, [holidays, leaveRequests, wfhRequests, myEmployeeId]);
+  }, [holidays, leaveRequests, wfhRequests, myEmployeeId, calYear, calMonth]);
 
   const greeting = useMemo(getGreetingByHour, []);
   const isSmallScreen = Dimensions.get('window').width < 420;
+  const donutSize = isSmallScreen ? 150 : 182;
+  const donutThickness = isSmallScreen ? 14 : 18;
+  const donutInnerSize = isSmallScreen ? 94 : 116;
+  const leaveRingSegments = useMemo(
+    () => buildLeaveRingSegments({
+      usedDays: approvedLeaveDays,
+      pendingDays: pendingLeaveDays,
+      remainingDays: leaveBalance,
+    }),
+    [approvedLeaveDays, pendingLeaveDays, leaveBalance],
+  );
   const todayDate = new Date().toISOString().slice(0, 10);
   const myTodayEntries = timeEntries.filter(
     entry => String(entry.employeeId) === myEmployeeId && entry.date === todayDate,
@@ -349,7 +391,7 @@ export default function EmpDashboardScreen({ onNavigateTab }) {
           <Text style={[styles.metricValue, { color: '#16a34a' }]}>{leaveBalance}</Text>
           <Text style={styles.metricSub}>days remaining</Text>
           <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${Math.max(8, 100 - leaveUsagePct)}%` }]} />
+            <View style={[styles.progressFill, { width: `${Math.max(8, 100 - leaveUsagePct)}%`, backgroundColor: getLeaveColor(leaveUsagePct) }]} />
           </View>
           <View style={styles.metricFootRow}>
             <Text style={styles.footLeft}>Used: {approvedLeaveDays}</Text>
@@ -389,14 +431,45 @@ export default function EmpDashboardScreen({ onNavigateTab }) {
           <Text style={[styles.panelTitle, isSmallScreen && styles.panelTitleMobile]}>LEAVE USAGE</Text>
 
           <View style={styles.donutWrap}>
-            <View style={[styles.donutOuter, isSmallScreen && styles.donutOuterMobile]}>
-              <View style={[styles.donutInner, isSmallScreen && styles.donutInnerMobile]}>
+            <View style={[styles.donutOuter, { width: donutSize, height: donutSize }]}>
+              <View style={[styles.donutRing, { width: donutSize, height: donutSize }]}>
+                {leaveRingSegments.map((segment, index) => {
+                  const segmentAngle = 360 / leaveRingSegments.length;
+                  const radius = (donutSize / 2) - (donutThickness / 2) - 1;
+                  const arcLength = Math.max(donutThickness + 2, ((2 * Math.PI * radius) / leaveRingSegments.length) * 1.2);
+                  const angle = -90 + (index + 0.5) * segmentAngle;
+                  const theta = (angle * Math.PI) / 180;
+                  const center = donutSize / 2;
+                  const x = center + radius * Math.cos(theta);
+                  const y = center + radius * Math.sin(theta);
+
+                  return (
+                    <View
+                      key={`${segment.color}-${index}`}
+                      style={[
+                        styles.donutSegment,
+                        {
+                          width: arcLength,
+                          height: donutThickness,
+                          borderRadius: donutThickness / 2,
+                          backgroundColor: segment.color,
+                          left: x - arcLength / 2,
+                          top: y - donutThickness / 2,
+                          transform: [{ rotate: `${angle + 90}deg` }],
+                        },
+                      ]}
+                    />
+                  );
+                })}
+              </View>
+              <View style={[styles.donutInner, { width: donutInnerSize, height: donutInnerSize, borderRadius: donutInnerSize / 2 }]}>
                 <Text style={[styles.donutCenter, isSmallScreen && styles.donutCenterMobile]}>{leaveUsagePct}%</Text>
               </View>
             </View>
             <View style={[styles.leaveLegendRow, isSmallScreen && styles.leaveLegendRowMobile]}>
               <Text style={[styles.legendDotText, { color: '#22c55e' }]}>o Remaining</Text>
               <Text style={[styles.legendDotText, { color: '#ef4444' }]}>o Used</Text>
+              <Text style={[styles.legendDotText, { color: '#f97316' }]}>o Pending</Text>
             </View>
             <View style={[styles.leaveStatRow, isSmallScreen && styles.leaveStatRowMobile]}>
               <View style={styles.leaveStatCol}>
@@ -404,7 +477,7 @@ export default function EmpDashboardScreen({ onNavigateTab }) {
                 <Text style={styles.leaveStatLabel}>Used</Text>
               </View>
               <View style={styles.leaveStatCol}>
-                <Text style={[styles.leaveStatValue, { color: '#16a34a' }]}>{leaveBalance}</Text>
+                <Text style={[styles.leaveStatValue, { color: '#22c55e' }]}>{leaveBalance}</Text>
                 <Text style={styles.leaveStatLabel}>Remaining</Text>
               </View>
               <View style={styles.leaveStatCol}>
@@ -418,9 +491,13 @@ export default function EmpDashboardScreen({ onNavigateTab }) {
         <View style={[styles.panelCard, isSmallScreen && styles.panelCardMobile]}>
           <Text style={[styles.panelTitle, isSmallScreen && styles.panelTitleMobile]}>CALENDAR</Text>
           <View style={styles.calendarHeader}>
-            <Text style={styles.calendarArrow}>‹</Text>
+            <TouchableOpacity onPress={onPrevMonth} hitSlop={12}>
+              <Text style={styles.calendarArrow}>‹</Text>
+            </TouchableOpacity>
             <Text style={[styles.calendarMonth, isSmallScreen && styles.calendarMonthMobile]}>{calendar.monthLabel}</Text>
-            <Text style={styles.calendarArrow}>›</Text>
+            <TouchableOpacity onPress={onNextMonth} hitSlop={12}>
+              <Text style={styles.calendarArrow}>›</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.weekRow}>
@@ -432,9 +509,8 @@ export default function EmpDashboardScreen({ onNavigateTab }) {
           <View style={styles.calendarGrid}>
             {calendar.cells.map((day, idx) => {
               const isToday = day === calendar.today;
-              const now = new Date();
               const key = day
-                ? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                ? `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
                 : '';
               const isHoliday = day ? holidayDays.has(key) : false;
               const isLeave = day ? leaveDays.has(key) : false;
@@ -735,13 +811,17 @@ const styles = StyleSheet.create({
 
   donutWrap: { alignItems: 'center', justifyContent: 'center', flex: 1 },
   donutOuter: {
-    width: 182,
-    height: 182,
-    borderRadius: 91,
-    borderWidth: 18,
-    borderColor: '#22c55e',
+    position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  donutRing: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+  },
+  donutSegment: {
+    position: 'absolute',
   },
   donutInner: {
     width: 116,
@@ -752,7 +832,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   donutCenter: { fontSize: 28, fontWeight: '800', color: '#0f172a' },
-  donutOuterMobile: { width: 150, height: 150, borderRadius: 75, borderWidth: 14 },
+  donutOuterMobile: { width: 150, height: 150, borderRadius: 75 },
   donutInnerMobile: { width: 94, height: 94, borderRadius: 47 },
   donutCenterMobile: { fontSize: 22 },
   leaveLegendRow: { flexDirection: 'row', gap: 14, marginTop: 10 },

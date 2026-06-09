@@ -106,20 +106,26 @@ export function AuthProvider({ children }) {
       setUser(normalizedUser);
       return { ok: true, user: normalizedUser };
     } catch (error) {
-      const isNetworkError =
-        !error?.response &&
-        (String(error?.message || '').toLowerCase().includes('network') ||
-          String(error?.code || '').toLowerCase().includes('network'));
-      const message =
-        (isNetworkError
-          ? `Cannot reach backend server (${error?.message || 'network error'}). Current API: ${hrApi.defaults.baseURL}. Check src/api/hrApi.js.`
-          : null) ||
-        (error?.response
-          ? `Login failed (${error.response.status}). ${error?.response?.data?.error || error?.response?.data?.message || 'Server rejected login request.'}`
-          : null) ||
+      const status = error?.response?.status;
+      const serverMsg =
         error?.response?.data?.error ||
         error?.response?.data?.message ||
-        'Login failed. Please check your credentials.';
+        null;
+
+      let message;
+      if (!error?.response) {
+        message = 'Unable to connect. Please check your internet connection and try again.';
+      } else if (status === 401) {
+        message = serverMsg || 'Incorrect email or password.';
+      } else if (status === 403) {
+        message = serverMsg || 'Your account is not authorized to access this app.';
+      } else if (status === 404) {
+        message = serverMsg || 'Account not found. Please check your email.';
+      } else if (status >= 500) {
+        message = 'Server error. Please try again later.';
+      } else {
+        message = serverMsg || 'Login failed. Please check your credentials.';
+      }
       return { ok: false, message };
     } finally {
       setIsLoading(false);
