@@ -14,6 +14,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { AuthContext } from '../../state/AuthContext';
 import { AppStoreActionsContext, AppStoreContext } from '../../state/AppStore';
 import hrApi from '../../api/hrApi';
+import { downloadPayslip } from '../../utils/payslipDownload';
 
 let persistedTrackerDraft = {
   activityType: 'Working',
@@ -108,8 +109,9 @@ export default function EmpDashboardScreen({ onNavigateTab }) {
     else { setCalMonth(m => m + 1); }
   };
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const trackingStartRef = useRef(null); // exact Date when tracking started
-  const intervalRef = useRef(null);      // setInterval id
+  const [breakdownsByPayrollId, setBreakdownsByPayrollId] = useState({});
+  const trackingStartRef = useRef(null);
+  const intervalRef = useRef(null);
 
   // Clean up interval on unmount
   useEffect(() => () => clearInterval(intervalRef.current), []);
@@ -122,6 +124,32 @@ export default function EmpDashboardScreen({ onNavigateTab }) {
   useEffect(() => {
     refreshTimeEntries(myEmployeeId);
   }, [refreshTimeEntries, myEmployeeId]);
+
+  useEffect(() => {
+    let alive = true;
+    hrApi.get(`/payrolls/employee/${myEmployeeId}/breakdowns`)
+      .then(({ data }) => {
+        const rows = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+        const grouped = rows.reduce((acc, row) => {
+          const key = String(row.fk_payroll_id || row.payroll_id || '');
+          if (!key) return acc;
+          if (!acc[key]) acc[key] = [];
+          acc[key].push(row);
+          return acc;
+        }, {});
+        if (alive) setBreakdownsByPayrollId(grouped);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [myEmployeeId]);
+
+  const onDownloadPayslip = payslip =>
+    downloadPayslip(payslip, {
+      myEmployeeId,
+      userName: user?.name,
+      userRole: user?.role,
+      breakdownsByPayrollId,
+    });
 
   useEffect(() => {
     let mounted = true;
@@ -616,7 +644,7 @@ export default function EmpDashboardScreen({ onNavigateTab }) {
                     <View style={styles.payRow}><Text style={styles.payNetKey}>Net Pay</Text><Text style={styles.payNetVal}>{formatMoney(net)}</Text></View>
                   </View>
 
-                  <TouchableOpacity style={styles.downloadBtn}>
+                  <TouchableOpacity style={styles.downloadBtn} onPress={() => onDownloadPayslip(p)}>
                     <MaterialCommunityIcons name="download" size={15} color="#ffffff" />
                     <Text style={styles.downloadText}>Download</Text>
                   </TouchableOpacity>
