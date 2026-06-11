@@ -1,10 +1,10 @@
-import React, { useContext } from 'react';
+import React, { useContext, useEffect } from 'react';
 import {
   createDrawerNavigator,
   DrawerContentScrollView,
   DrawerItemList,
 } from '@react-navigation/drawer';
-import { TouchableOpacity, Text, View, Alert } from 'react-native';
+import { BackHandler, TouchableOpacity, Text, View, Alert } from 'react-native';
 import { AuthContext } from '../state/AuthContext';
 
 import HRDashboardScreen from '../screens/HRDashboardScreen';
@@ -19,6 +19,29 @@ const Drawer = createDrawerNavigator();
 
 function CustomDrawerContent(props) {
   const { signOut } = useContext(AuthContext);
+  const homeScreen = 'EmployeeDetails';
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      const state = props.navigation.getState();
+      const currentRoute = state?.routes?.[state.index ?? 0]?.name;
+      if (currentRoute && currentRoute !== homeScreen) {
+        props.navigation.navigate(homeScreen);
+        return true;
+      }
+      Alert.alert(
+        'Exit App',
+        'Are you sure you want to exit?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Exit', style: 'destructive', onPress: () => BackHandler.exitApp() },
+        ],
+        { cancelable: true },
+      );
+      return true;
+    });
+    return () => sub.remove();
+  }, [props.navigation, homeScreen]);
 
   return (
     <DrawerContentScrollView

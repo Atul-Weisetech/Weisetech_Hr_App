@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  Alert,
+  BackHandler,
   View,
   TouchableOpacity,
   Text,
@@ -24,6 +26,26 @@ const TABS = [
 
 export default function EmployeeStack() {
   const [activeTab, setActiveTab] = useState('dashboard');
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (activeTab !== 'dashboard') {
+        setActiveTab('dashboard');
+        return true;
+      }
+      Alert.alert(
+        'Exit App',
+        'Are you sure you want to exit?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Exit', style: 'destructive', onPress: () => BackHandler.exitApp() },
+        ],
+        { cancelable: true },
+      );
+      return true;
+    });
+    return () => sub.remove();
+  }, [activeTab]);
 
   const ActiveScreen = TABS.find(t => t.key === activeTab)?.component;
 
