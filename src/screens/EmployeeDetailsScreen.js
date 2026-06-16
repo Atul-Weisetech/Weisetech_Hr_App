@@ -185,6 +185,10 @@ export default function EmployeeDetailsScreen() {
       loadEmployees();
       resetForm();
       setAddOpen(false);
+      Alert.alert(
+        'Account created',
+        'The account has been created and a password setup email will be sent to the address you entered.',
+      );
     } catch (error) {
       const backendMessage =
         error?.response?.data?.error ||
@@ -429,6 +433,9 @@ export default function EmployeeDetailsScreen() {
                 <View style={styles.typeBlock}>
                   <Text style={styles.sectionLabel}>Account Type</Text>
                   <Text style={styles.sectionHint}>Choose whether you are creating an employee account or an HR account.</Text>
+                  <Text style={styles.emailHint}>
+                    After you save, the backend will send an invite email so the user can set their password.
+                  </Text>
                   <View style={styles.typeToggleRow}>
                     <Pressable
                       style={[
@@ -488,6 +495,9 @@ export default function EmployeeDetailsScreen() {
                   <TextInput style={styles.input} value={form.email} onChangeText={t => onChangeField('email', t)}
                     placeholder="e.g. pratham@company.com" placeholderTextColor="#9ca3af"
                     autoCapitalize="none" keyboardType="email-address" />
+                  <Text style={styles.fieldHelpText}>
+                    This email will receive the password setup invite created by the backend.
+                  </Text>
                 </View>
 
                 <View style={styles.fieldGroup}>
@@ -744,10 +754,12 @@ const styles = StyleSheet.create({
   },
   sectionLabel: { color: '#0f172a', fontWeight: '900', fontSize: 13, marginBottom: 3 },
   sectionHint: { color: '#64748b', fontWeight: '600', fontSize: 11, marginBottom: 10, lineHeight: 16 },
+  emailHint: { color: '#0f172a', fontWeight: '600', fontSize: 11, marginBottom: 10, lineHeight: 16, backgroundColor: '#f8fafc', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: '#e2e8f0' },
   fieldGroup: { marginBottom: 10 },
   fieldRow: { flexDirection: 'row', gap: 10 },
   fieldHalf: { flex: 1 },
   fieldLabel: { color: '#334155', fontWeight: '800', fontSize: 12, marginBottom: 6 },
+  fieldHelpText: { color: '#64748b', fontWeight: '600', fontSize: 11, marginTop: 6, lineHeight: 15 },
   required: { color: '#CC0D49', fontWeight: '900' },
   optional: { color: '#94a3b8', fontWeight: '600', fontSize: 11 },
   toggleRow: { flexDirection: 'row', gap: 6 },

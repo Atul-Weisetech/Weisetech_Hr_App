@@ -1,21 +1,62 @@
 import React, { useContext } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Platform, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { AuthContext } from '../state/AuthContext';
 import LoginScreen from '../screens/LoginScreen';
+import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import AppDrawer from './AppDrawer';
 import EmployeeStack from './EmployeeStack';
 import { colors, sharedStyles } from '../styles/theme';
 
-const Stack = createNativeStackNavigator();
+const AuthStack = createNativeStackNavigator();
+const ProtectedStack = createNativeStackNavigator();
 
 function SplashScreen() {
   return (
     <View style={sharedStyles.splash}>
       <ActivityIndicator size="large" color={colors.primary} />
     </View>
+  );
+}
+
+const linking = {
+  prefixes: [
+    'weisetechhrapp://',
+    ...(Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.origin
+      ? [window.location.origin]
+      : []),
+  ],
+  config: {
+    screens: {
+      Login: 'login',
+      ResetPassword: 'reset-password',
+      App: 'app',
+      Employee: 'employee',
+    },
+  },
+};
+
+function AuthNavigator() {
+  return (
+    <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+      <AuthStack.Screen name="Login" component={LoginScreen} />
+      <AuthStack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+    </AuthStack.Navigator>
+  );
+}
+
+function ProtectedNavigator({ canAccessAdminArea }) {
+  return (
+    <ProtectedStack.Navigator screenOptions={{ headerShown: false }}>
+      {canAccessAdminArea ? (
+        <ProtectedStack.Screen name="App" component={AppDrawer} />
+      ) : (
+        <ProtectedStack.Screen name="Employee" component={EmployeeStack} />
+      )}
+      <ProtectedStack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+    </ProtectedStack.Navigator>
   );
 }
 
@@ -28,16 +69,12 @@ export default function RootNavigator() {
   if (isRestoring) return <SplashScreen />;
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!user ? (
-          <Stack.Screen name="Login" component={LoginScreen} />
-        ) : canAccessAdminArea ? (
-          <Stack.Screen name="App" component={AppDrawer} />
-        ) : (
-          <Stack.Screen name="Employee" component={EmployeeStack} />
-        )}
-      </Stack.Navigator>
+    <NavigationContainer linking={linking}>
+      {!user ? (
+        <AuthNavigator />
+      ) : (
+        <ProtectedNavigator canAccessAdminArea={canAccessAdminArea} />
+      )}
     </NavigationContainer>
   );
 }
