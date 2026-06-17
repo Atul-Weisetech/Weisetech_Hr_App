@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -10,12 +10,13 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Image,
 } from 'react-native';
-import { useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import hrApi from '../api/hrApi';
-import { AuthContext } from '../state/AuthContext';
 import { sharedStyles, colors } from '../styles/theme';
+
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z\d]).{8,}$/;
 
 function normalizeParam(value) {
   return String(value || '').trim();
@@ -36,20 +37,20 @@ function getQueryParamsFromWeb() {
 
 export default function ResetPasswordScreen() {
   const route = useRoute();
-  const { signOut } = useContext(AuthContext);
+  const navigation = useNavigation();
+
 
   const initialParams = useMemo(() => {
     const routeParams = route?.params || {};
     const webParams = getQueryParamsFromWeb();
-
     return {
       token: normalizeParam(routeParams.token || routeParams.inviteToken || webParams.token),
       email: normalizeParam(routeParams.email || webParams.email).toLowerCase(),
     };
   }, [route?.params]);
 
-  const [token, setToken] = useState(initialParams.token);
-  const [email, setEmail] = useState(initialParams.email);
+  const [token] = useState(initialParams.token);
+  const [email] = useState(initialParams.email);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -57,33 +58,11 @@ export default function ResetPasswordScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  useEffect(() => {
-    setToken(initialParams.token);
-    setEmail(initialParams.email);
-  }, [initialParams]);
-
   const isInviteFlow = !!token;
-  const heading = isInviteFlow ? 'Set Your Password' : 'Reset Password';
-  const subheading = isInviteFlow
-    ? 'Use the invite link from HR to create a new password for your Weisetech account.'
-    : 'Verify your email and choose a new password to regain access.';
-
-  const submitLabel = isInviteFlow ? 'Set Password' : 'Reset Password';
 
   const onSubmit = async () => {
     const trimmedPassword = newPassword.trim();
     const trimmedConfirm = confirmPassword.trim();
-    const trimmedEmail = email.trim().toLowerCase();
-
-    if (isInviteFlow && !token) {
-      Alert.alert('Missing token', 'The invite link is missing its token.');
-      return;
-    }
-
-    if (!isInviteFlow && !trimmedEmail) {
-      Alert.alert('Email required', 'Enter the registered email address.');
-      return;
-    }
 
     if (!trimmedPassword || !trimmedConfirm) {
       Alert.alert('Missing password', 'Please enter and confirm your new password.');
@@ -95,28 +74,25 @@ export default function ResetPasswordScreen() {
       return;
     }
 
-    if (trimmedPassword.length < 8) {
-      Alert.alert('Weak password', 'Please choose a password that is at least 8 characters long.');
+    if (!PASSWORD_REGEX.test(trimmedPassword)) {
+      Alert.alert(
+        'Weak password',
+        'Password must be at least 8 characters and include uppercase, lowercase, number, and special character.',
+      );
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const endpoint = isInviteFlow ? '/auth/set-password' : '/auth/reset-password';
+      const endpoint = isInviteFlow ? '/set-password' : '/reset-password';
       const payload = isInviteFlow
         ? { token, newPassword: trimmedPassword }
-        : { email: trimmedEmail, newPassword: trimmedPassword };
+        : { email, newPassword: trimmedPassword };
 
       await hrApi.post(endpoint, payload);
       setIsSuccess(true);
       setNewPassword('');
       setConfirmPassword('');
-      Alert.alert(
-        'Password updated',
-        isInviteFlow
-          ? 'Your password was set successfully. You can now log in with the new password.'
-          : 'Your password was reset successfully. You can now log in with the new password.',
-      );
     } catch (error) {
       Alert.alert(
         'Could not update password',
@@ -127,9 +103,37 @@ export default function ResetPasswordScreen() {
     }
   };
 
-  const onReturnToLogin = async () => {
-    await signOut();
+  const onReturnToLogin = () => {
+    navigation.navigate('Login');
   };
+
+  if (isSuccess) {
+    return (
+      <KeyboardAvoidingView style={sharedStyles.authRoot}>
+        <ScrollView
+          contentContainerStyle={sharedStyles.authScroll}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={sharedStyles.authCard}>
+            <View style={styles.iconContainer}>
+              <MaterialCommunityIcons name="check-circle" size={36} color="#16a34a" />
+            </View>
+            <Text style={[sharedStyles.authTitle, styles.successTitle]}>Password Updated</Text>
+            <Text style={styles.subtitle}>
+              Your password has been reset successfully. You can now log in with your new password.
+            </Text>
+            <TouchableOpacity
+              style={[sharedStyles.primaryButton, styles.successButton]}
+              onPress={onReturnToLogin}
+              activeOpacity={0.85}
+            >
+              <Text style={sharedStyles.buttonText}>Back to Login</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -141,56 +145,32 @@ export default function ResetPasswordScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={sharedStyles.authLogoContainer}>
-          <Image
-            source={require('../assets/weisetechLogo.png')}
-            style={sharedStyles.authLogoImage}
-            resizeMode="contain"
-          />
-        </View>
-
         <View style={sharedStyles.authCard}>
-          <Text style={sharedStyles.authTitle}>{heading}</Text>
-          <Text style={styles.subtitle}>{subheading}</Text>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => navigation.goBack()}
+          >
+            <MaterialCommunityIcons name="arrow-left" size={16} color="#374151" />
+            <Text style={styles.backText}>Back</Text>
+          </TouchableOpacity>
 
-          {isSuccess ? (
-            <View style={styles.successBox}>
-              <Text style={styles.successTitle}>Password updated</Text>
-              <Text style={styles.successText}>
-                Your account password has been changed. Use the button below to go back to the login screen.
-              </Text>
-              <TouchableOpacity
-                style={[sharedStyles.primaryButton, styles.returnButton]}
-                onPress={onReturnToLogin}
-                activeOpacity={0.85}
-              >
-                <Text style={sharedStyles.buttonText}>Back to Login</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
+          <View style={styles.iconContainer}>
+            <MaterialCommunityIcons name="lock" size={32} color="#1d4ed8" />
+          </View>
 
-          {!isInviteFlow ? (
-            <View style={sharedStyles.authFieldGroup}>
-              <Text style={sharedStyles.label}>Email</Text>
-              <TextInput
-                style={sharedStyles.input}
-                placeholder="you@example.com"
-                placeholderTextColor="#9ca3af"
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                editable={!isSubmitting}
-              />
-            </View>
+          <Text style={sharedStyles.authTitle}>
+            {isInviteFlow ? 'Set Your Password' : 'Reset Password'}
+          </Text>
+
+          {isInviteFlow ? (
+            <Text style={styles.subtitle}>
+              Use the invite link from HR to create a new password for your Weisetech account.
+            </Text>
           ) : (
-            <View style={styles.tokenBox}>
-              <Text style={styles.tokenLabel}>Invite link detected</Text>
-              <Text style={styles.tokenText} numberOfLines={2}>
-                This reset flow was opened from the invite email sent by HR.
-              </Text>
-            </View>
+            <Text style={styles.subtitle}>
+              Set a new password for{' '}
+              <Text style={styles.emailBold}>{email}</Text>
+            </Text>
           )}
 
           <View style={sharedStyles.authFieldGroup}>
@@ -198,7 +178,7 @@ export default function ResetPasswordScreen() {
             <View style={sharedStyles.authPasswordWrapper}>
               <TextInput
                 style={[sharedStyles.input, sharedStyles.authPasswordInput]}
-                placeholder="Create a strong password"
+                placeholder="Min 8 chars, upper, lower, number, special"
                 placeholderTextColor="#9ca3af"
                 value={newPassword}
                 onChangeText={setNewPassword}
@@ -211,7 +191,11 @@ export default function ResetPasswordScreen() {
                 onPress={() => setShowPassword(prev => !prev)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Text style={sharedStyles.authEyeText}>{showPassword ? 'Hide' : 'Show'}</Text>
+                <MaterialCommunityIcons
+                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                  size={20}
+                  color="#6b7280"
+                />
               </TouchableOpacity>
             </View>
           </View>
@@ -221,7 +205,7 @@ export default function ResetPasswordScreen() {
             <View style={sharedStyles.authPasswordWrapper}>
               <TextInput
                 style={[sharedStyles.input, sharedStyles.authPasswordInput]}
-                placeholder="Re-enter your password"
+                placeholder="Re-enter new password"
                 placeholderTextColor="#9ca3af"
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
@@ -234,7 +218,11 @@ export default function ResetPasswordScreen() {
                 onPress={() => setShowConfirmPassword(prev => !prev)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Text style={sharedStyles.authEyeText}>{showConfirmPassword ? 'Hide' : 'Show'}</Text>
+                <MaterialCommunityIcons
+                  name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+                  size={20}
+                  color="#6b7280"
+                />
               </TouchableOpacity>
             </View>
           </View>
@@ -248,7 +236,9 @@ export default function ResetPasswordScreen() {
             {isSubmitting ? (
               <ActivityIndicator size="small" color={colors.onPrimary} />
             ) : (
-              <Text style={sharedStyles.buttonText}>{submitLabel}</Text>
+              <Text style={sharedStyles.buttonText}>
+                {isInviteFlow ? 'Set Password' : 'Reset Password'}
+              </Text>
             )}
           </TouchableOpacity>
         </View>
@@ -258,56 +248,44 @@ export default function ResetPasswordScreen() {
 }
 
 const styles = StyleSheet.create({
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    gap: 4,
+  },
+  backText: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '600',
+  },
+  iconContainer: {
+    alignSelf: 'center',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#dbeafe',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
   subtitle: {
     fontSize: 13,
     lineHeight: 19,
     color: '#64748b',
     textAlign: 'center',
-    marginBottom: 18,
+    marginBottom: 20,
   },
-  tokenBox: {
-    marginBottom: 18,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    backgroundColor: '#f8fafc',
-  },
-  tokenLabel: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#0f172a',
-    marginBottom: 4,
-  },
-  tokenText: {
-    fontSize: 12,
-    lineHeight: 18,
-    color: '#475569',
-    fontWeight: '600',
-  },
-  successBox: {
-    marginBottom: 18,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#bbf7d0',
-    backgroundColor: '#f0fdf4',
-    padding: 14,
+  emailBold: {
+    fontWeight: '700',
+    color: '#374151',
   },
   successTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#166534',
-    marginBottom: 6,
+    color: '#16a34a',
   },
-  successText: {
-    fontSize: 12,
-    lineHeight: 18,
-    color: '#166534',
-    marginBottom: 12,
-    fontWeight: '600',
-  },
-  returnButton: {
+  successButton: {
     backgroundColor: '#16a34a',
+    marginTop: 8,
   },
   disabledButton: {
     opacity: 0.75,
